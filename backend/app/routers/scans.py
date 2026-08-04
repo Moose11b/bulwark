@@ -65,7 +65,11 @@ async def create_scan(
     from app.core.target_validation import validate_target_pinned, TargetValidationError
     from app.core.audit import audit_log
     try:
-        clean_target, pinned_ip = validate_target_pinned(body.target)
+        from app.core.target_validation import format_target
+        validated = validate_target_pinned(body.target)
+        # Persist host:port — the worker re-validates scan.target later, and
+        # storing a bare host would drop the port before any scanner sees it.
+        clean_target = format_target(validated.host, validated.port)
     except TargetValidationError as e:
         # Audit the blocked attempt
         await audit_log(

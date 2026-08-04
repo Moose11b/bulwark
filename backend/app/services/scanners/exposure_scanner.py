@@ -59,9 +59,13 @@ API_KEY_PATTERNS = [
 class ExposureScanner:
     """Sensitive file and secret exposure checker."""
 
-    async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None) -> list[dict]:
+    async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
+                   port: int | None = None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
-        base_url = f"https://{hostname}"
+        # A non-443 port almost always means plain HTTP in practice; 443 and
+        # unspecified keep TLS. hostname stays bare for pinned-transport matching.
+        scheme = "https" if port in (None, 443) else "http"
+        base_url = f"{scheme}://{hostname}:{port}" if port else f"https://{hostname}"
         findings = []
 
         from app.core.pinned_connection import pinned_async_client

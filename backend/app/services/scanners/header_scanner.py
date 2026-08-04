@@ -52,11 +52,16 @@ GRADE_MAP = [(90,"A+"),(80,"A"),(70,"B"),(60,"C"),(50,"D"),(0,"F")]
 class HeaderScanner:
     """HTTP security response header analyser."""
 
-    async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None) -> list[dict]:
+    async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
+                   port: int | None = None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
         findings = []
 
         from app.core.pinned_connection import pinned_async_client
+
+        # An explicit port is authoritative. hostname stays bare so the pinned
+        # transport still matches on url.host, which excludes the port.
+        authority = f"{hostname}:{port}" if port else hostname
 
         for scheme in ("https", "http"):
             try:
@@ -65,7 +70,7 @@ class HeaderScanner:
                     timeout=15,
                     headers={"User-Agent": "Bulwark-Scanner/2.0"},
                 ) as client:
-                    resp = await client.get(f"{scheme}://{hostname}/")
+                    resp = await client.get(f"{scheme}://{authority}/")
                     headers = dict(resp.headers)
                 break
             except Exception:

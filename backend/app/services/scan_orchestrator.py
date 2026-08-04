@@ -150,7 +150,8 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
         # window); subprocess scanners re-check just before launch.
         from app.core.target_validation import validate_target_pinned, TargetValidationError
         try:
-            target, pinned_ip = validate_target_pinned(target)
+            validated = validate_target_pinned(target)
+            target, port, pinned_ip = validated.host, validated.port, validated.pinned_ip
         except TargetValidationError as exc:
             logger.warning("orchestrator.target_blocked", scan_id=scan_id, error=str(exc))
             await _update_scan(
@@ -183,14 +184,14 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
                 from app.services.scanners.ssl_scanner import SSLScanner
                 all_findings += await _run_stage(
                     r, scan_id, "SSL/TLS analysis", 25, 35, 120,
-                    lambda: SSLScanner().scan(target, pinned_ip=pinned_ip),
+                    lambda: SSLScanner().scan(target, pinned_ip=pinned_ip, port=port),
                 )
 
             if scan_type in (ScanType.FULL, ScanType.HEADERS):
                 from app.services.scanners.header_scanner import HeaderScanner
                 all_findings += await _run_stage(
                     r, scan_id, "HTTP header audit", 38, 46, 90,
-                    lambda: HeaderScanner().scan(target, pinned_ip=pinned_ip),
+                    lambda: HeaderScanner().scan(target, pinned_ip=pinned_ip, port=port),
                 )
 
             if scan_type in (ScanType.FULL, ScanType.DNS):
@@ -208,6 +209,7 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
                         target,
                         _make_progress_cb(loop, r, scan_id, 58, 0.10),
                         pinned_ip=pinned_ip,
+                        port=port,
                     ),
                 )
 
@@ -219,6 +221,7 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
                         target,
                         _make_progress_cb(loop, r, scan_id, 70, 0.12),
                         pinned_ip=pinned_ip,
+                        port=port,
                     ),
                 )
 
@@ -226,7 +229,7 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
                 from app.services.scanners.exposure_scanner import ExposureScanner
                 all_findings += await _run_stage(
                     r, scan_id, "Sensitive file exposure", 82, 86, 180,
-                    lambda: ExposureScanner().scan(target, pinned_ip=pinned_ip),
+                    lambda: ExposureScanner().scan(target, pinned_ip=pinned_ip, port=port),
                 )
 
             # ── Shodan passive exposure intel ────────────────────

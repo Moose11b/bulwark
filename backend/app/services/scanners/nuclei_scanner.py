@@ -191,12 +191,14 @@ class NucleiScanner:
     ])
 
     async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-                   allow_private: bool = False) -> list[dict]:
+                   allow_private: bool = False, port: int | None = None) -> list[dict]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._run, target, progress_cb, pinned_ip, allow_private)
+        return await loop.run_in_executor(
+            None, self._run, target, progress_cb, pinned_ip, allow_private, port
+        )
 
     def _run(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-             allow_private: bool = False) -> list[dict]:
+             allow_private: bool = False, port: int | None = None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
 
         # Pre-launch SSRF guard: Nuclei resolves DNS itself, so re-verify the
@@ -207,8 +209,12 @@ class NucleiScanner:
             if not assert_still_public(hostname):
                 logger.warning("nuclei.ssrf_guard_blocked", target=hostname)
                 return []
-        scheme = "http" if target.startswith("http://") else "https"
-        scan_url = f"{scheme}://{hostname}"
+        if port:
+            scheme = "https" if port == 443 else "http"
+            scan_url = f"{scheme}://{hostname}:{port}"
+        else:
+            scheme = "http" if target.startswith("http://") else "https"
+            scan_url = f"{scheme}://{hostname}"
 
         if progress_cb:
             progress_cb(10, f"Starting Nuclei scan against {hostname}...")

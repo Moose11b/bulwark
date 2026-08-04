@@ -164,12 +164,14 @@ class NiktoScanner:
     """Async wrapper around the Nikto CLI web vulnerability scanner."""
 
     async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-                   allow_private: bool = False) -> list[dict]:
+                   allow_private: bool = False, port: int | None = None) -> list[dict]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._run, target, progress_cb, pinned_ip, allow_private)
+        return await loop.run_in_executor(
+            None, self._run, target, progress_cb, pinned_ip, allow_private, port
+        )
 
     def _run(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-             allow_private: bool = False) -> list[dict]:
+             allow_private: bool = False, port: int | None = None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
 
         # Pre-launch SSRF guard: Nikto does its own DNS resolution, so we
@@ -181,9 +183,14 @@ class NiktoScanner:
                 logger.warning("nikto.ssrf_guard_blocked", target=hostname)
                 return []
 
-        # Determine scheme
-        scheme = "https" if not target.startswith("http://") else "http"
-        scan_url = f"{scheme}://{hostname}"
+        # Determine scheme. A non-443 explicit port is treated as plain HTTP,
+        # matching how these services are usually exposed.
+        if port:
+            scheme = "https" if port == 443 else "http"
+            scan_url = f"{scheme}://{hostname}:{port}"
+        else:
+            scheme = "https" if not target.startswith("http://") else "http"
+            scan_url = f"{scheme}://{hostname}"
 
         if progress_cb:
             progress_cb(10, f"Starting Nikto scan against {hostname}...")

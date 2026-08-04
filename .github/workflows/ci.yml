@@ -10,6 +10,41 @@ on:
   pull_request:
 
 jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bulwark
+          POSTGRES_USER: bulwark
+          POSTGRES_PASSWORD: bulwark
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql+asyncpg://bulwark:bulwark@localhost:5432/bulwark
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t bulwark-backend:test ./backend
+
+      - name: Create tables and run pytest
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL -e REDIS_URL \
+            -e CELERY_BROKER_URL -e CELERY_RESULT_BACKEND \
+            bulwark-backend:test \
+            sh -c "python -c 'import asyncio; from app.database import create_tables; asyncio.run(create_tables())' && pytest"
+
   build-and-smoke-test:
     runs-on: ubuntu-latest
     steps:

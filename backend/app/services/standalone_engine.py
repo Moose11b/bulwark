@@ -46,13 +46,19 @@ class StandaloneScanEngine:
         """
         # Validate target for SSRF safety even in standalone mode.
         # Pin the validated IP to close the DNS-rebind TOCTOU window.
-        from app.core.target_validation import validate_target_pinned, TargetValidationError
+        from app.core.target_validation import (
+            validate_target_pinned, format_target, TargetValidationError,
+        )
         try:
-            clean_target, pinned_ip = validate_target_pinned(
+            validated = validate_target_pinned(
                 target, allow_private=self.allow_private
             )
         except TargetValidationError as e:
             raise ValueError(f"Target validation failed: {e}")
+
+        clean_target = validated.host
+        port = validated.port
+        pinned_ip = validated.pinned_ip
 
         scanners = PROFILES.get(profile, PROFILES["web"])
         started = datetime.now(timezone.utc)
@@ -65,7 +71,7 @@ class StandaloneScanEngine:
             base_pct = int((step - 1) / total * 80)
             self._progress(base_pct, f"Running {name}...")
             try:
-                findings = await self._run_scanner(name, clean_target, pinned_ip)
+                findings = await self._run_scanner(name, clean_target, pinned_ip, port)
                 all_findings.extend(findings)
             except Exception as e:
                 # A single scanner failing shouldn't abort the whole run
@@ -83,7 +89,8 @@ class StandaloneScanEngine:
         self._progress(100, "Scan complete")
 
         return {
-            "target": clean_target,
+            # Report the target as actually scanned, port included.
+            "target": format_target(clean_target, port),
             "pinned_ip": pinned_ip,
             "profile": profile,
             "started_at": started.isoformat(),
@@ -94,29 +101,34 @@ class StandaloneScanEngine:
             "tool": "bulwark",
         }
 
-    async def _run_scanner(self, name: str, target: str, pinned_ip: str | None = None) -> list[dict]:
+    async def _run_scanner(self, name: str, target: str, pinned_ip: str | None = None,
+                           port: int | None = None) -> list[dict]:
         """Dynamically import and run a single scanner module."""
         if name == "nmap":
+            # nmap discovers ports itself, so an explicit port is not applied.
             from app.services.scanners.nmap_scanner import NmapScanner
             return await NmapScanner().scan(target)
         if name == "header_scanner":
             from app.services.scanners.header_scanner import HeaderScanner
-            return await HeaderScanner().scan(target, pinned_ip=pinned_ip)
+            return await HeaderScanner().scan(target, pinned_ip=pinned_ip, port=port)
         if name == "ssl_scanner":
             from app.services.scanners.ssl_scanner import SSLScanner
-            return await SSLScanner().scan(target, pinned_ip=pinned_ip)
+            return await SSLScanner().scan(target, pinned_ip=pinned_ip, port=port)
         if name == "dns_scanner":
+            # DNS records are per-name, not per-port.
             from app.services.scanners.dns_scanner import DNSScanner
             return await DNSScanner().scan(target)
         if name == "nikto":
             from app.services.scanners.nikto_scanner import NiktoScanner
-            return await NiktoScanner().scan(target, pinned_ip=pinned_ip, allow_private=self.allow_private)
+            return await NiktoScanner().scan(target, pinned_ip=pinned_ip, port=port,
+                                             allow_private=self.allow_private)
         if name == "nuclei":
             from app.services.scanners.nuclei_scanner import NucleiScanner
-            return await NucleiScanner().scan(target, pinned_ip=pinned_ip, allow_private=self.allow_private)
+            return await NucleiScanner().scan(target, pinned_ip=pinned_ip, port=port,
+                                              allow_private=self.allow_private)
         if name == "exposure_scanner":
             from app.services.scanners.exposure_scanner import ExposureScanner
-            return await ExposureScanner().scan(target, pinned_ip=pinned_ip)
+            return await ExposureScanner().scan(target, pinned_ip=pinned_ip, port=port)
         return []
 
     async def _classify(self, findings: list[dict]) -> list[dict]:

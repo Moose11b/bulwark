@@ -22,6 +22,7 @@ import ipaddress
 import re
 import socket
 import structlog
+from typing import NamedTuple
 
 logger = structlog.get_logger()
 
@@ -29,6 +30,24 @@ logger = structlog.get_logger()
 class TargetValidationError(ValueError):
     """Raised when a scan target fails security validation."""
     pass
+
+
+class ValidatedTarget(NamedTuple):
+    """A target that passed SSRF validation.
+
+    port is None when the target named no port, letting each scanner apply its
+    own protocol default. Carrying it explicitly matters: normalisation used to
+    discard the port entirely, so `http://app:8080` was scanned as
+    `http://app:80` — the wrong service, reported as if it were the right one.
+    """
+    host: str
+    port: int | None
+    pinned_ip: str | None
+
+
+def format_target(host: str, port: int | None) -> str:
+    """Render host/port back into a single storable target string."""
+    return f"{host}:{port}" if port else host
 
 
 # Cloud metadata + internal service hostnames that must never be scanned
@@ -63,8 +82,12 @@ _HOSTNAME_RE = re.compile(
 _IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 
-def _strip_target(raw: str) -> str:
-    """Remove scheme, credentials, path, and port — return bare host."""
+def _strip_target(raw: str) -> tuple[str, int | None]:
+    """Remove scheme, credentials, and path — return (host, port).
+
+    The port is returned rather than discarded so scanners connect to the
+    service the user actually named.
+    """
     t = raw.strip()
     # Reject embedded credentials (user:pass@host) outright
     if "@" in t.split("/")[0].replace("https://", "").replace("http://", ""):
@@ -73,10 +96,29 @@ def _strip_target(raw: str) -> str:
     t = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", "", t)
     # Strip path / query / fragment
     t = t.split("/")[0].split("?")[0].split("#")[0]
-    # Strip port (but keep IPv6 brackets handling simple — we block IPv6 literals anyway)
+
+    port: int | None = None
+    # Exactly one colon is host:port. More than one means an IPv6 literal,
+    # which is left intact so the explicit IPv6 rejection below can see it.
     if t.count(":") == 1:
-        t = t.split(":")[0]
-    return t.strip().lower().rstrip(".")
+        host_part, _, port_part = t.partition(":")
+        if port_part.isdigit():
+            parsed = int(port_part)
+            if not 1 <= parsed <= 65535:
+                raise TargetValidationError(
+                    f"Port {parsed} is out of range (1-65535)."
+                )
+            t, port = host_part, parsed
+        else:
+            # Colons are not valid in hostnames, so a single colon followed by
+            # a non-numeric value is a malformed port. Reject it explicitly —
+            # it would otherwise fall through to the IPv6 check and produce a
+            # confusing "IPv6 literal not supported" message.
+            raise TargetValidationError(
+                f"'{port_part}' is not a valid port number."
+            )
+
+    return t.strip().lower().rstrip("."), port
 
 
 def _ip_is_blocked(ip_str: str) -> tuple[bool, str]:
@@ -120,20 +162,22 @@ def validate_target(raw: str, *, resolve: bool = True, allow_private: bool = Fal
     explicitly authorises scanning internal/loopback addresses. This is OFF
     by default; real user-facing paths must never enable it.
 
-    NOTE: This returns only the hostname. There is a theoretical TOCTOU
-    window — a hostname validated here could be re-resolved to a different
-    (internal) IP when a scanner later connects (DNS rebinding). For paths
-    that act on the target, prefer validate_target_pinned(), which returns
-    the exact validated IP so the caller can pin the connection.
+    NOTE: This returns host[:port] with no pinned IP. There is a theoretical
+    TOCTOU window — a hostname validated here could be re-resolved to a
+    different (internal) IP when a scanner later connects (DNS rebinding).
+    For paths that act on the target, prefer validate_target_pinned(), which
+    returns the exact validated IP so the caller can pin the connection.
     """
-    _host, _ip = _validate(raw, resolve=resolve, allow_private=allow_private)
-    return _host
+    result = _validate(raw, resolve=resolve, allow_private=allow_private)
+    # Keep the port in the normalised string so callers that persist this
+    # value (assets, scans) can round-trip it back through validation.
+    return format_target(result.host, result.port)
 
 
 def validate_target_pinned(raw: str, *, resolve: bool = True,
-                           allow_private: bool = False) -> tuple[str, str | None]:
+                           allow_private: bool = False) -> ValidatedTarget:
     """
-    Validate a target and return (hostname, pinned_ip).
+    Validate a target and return ValidatedTarget(host, port, pinned_ip).
 
     pinned_ip is the single IP address that passed validation. Callers
     should connect to THIS IP (sending the hostname as a Host header / SNI)
@@ -152,11 +196,11 @@ def validate_target_pinned(raw: str, *, resolve: bool = True,
 
 
 def _validate(raw: str, *, resolve: bool = True,
-              allow_private: bool = False) -> tuple[str, str | None]:
+              allow_private: bool = False) -> ValidatedTarget:
     if not raw or not raw.strip():
         raise TargetValidationError("Target is required.")
 
-    host = _strip_target(raw)
+    host, port = _strip_target(raw)
 
     if not host:
         raise TargetValidationError("Could not parse a hostname from the target.")
@@ -168,15 +212,15 @@ def _validate(raw: str, *, resolve: bool = True,
     # blocks but still parse/normalise the target.
     if allow_private:
         if _IPV4_RE.match(host):
-            return host, host
+            return ValidatedTarget(host, port, host)
         if resolve:
             try:
                 infos = socket.getaddrinfo(host, None, socket.AF_INET)
                 ips = {info[4][0] for info in infos}
-                return host, (sorted(ips)[0] if ips else None)
+                return ValidatedTarget(host, port, sorted(ips)[0] if ips else None)
             except socket.gaierror:
-                return host, None
-        return host, None
+                return ValidatedTarget(host, port, None)
+        return ValidatedTarget(host, port, None)
 
     # Block obvious internal names
     if host in BLOCKED_HOSTNAMES:
@@ -197,7 +241,7 @@ def _validate(raw: str, *, resolve: bool = True,
         blocked, reason = _ip_is_blocked(host)
         if blocked:
             raise TargetValidationError(f"Target rejected: {reason}.")
-        return host, host
+        return ValidatedTarget(host, port, host)
 
     # Case 2: target must be a valid public hostname
     if not _HOSTNAME_RE.match(host):
@@ -230,6 +274,6 @@ def _validate(raw: str, *, resolve: bool = True,
         # so any is safe; the caller connects to this exact address rather
         # than re-resolving, closing the rebind window.
         pinned_ip = sorted(resolved_ips)[0]
-        return host, pinned_ip
+        return ValidatedTarget(host, port, pinned_ip)
 
-    return host, None
+    return ValidatedTarget(host, port, None)

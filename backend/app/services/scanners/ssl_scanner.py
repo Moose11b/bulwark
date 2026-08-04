@@ -13,12 +13,18 @@ logger = structlog.get_logger()
 class SSLScanner:
     """SSL/TLS certificate and protocol analyser."""
 
-    async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None) -> list[dict]:
+    async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
+                   port: int | None = None) -> list[dict]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._run, target, progress_cb, pinned_ip)
+        return await loop.run_in_executor(
+            None, self._run, target, progress_cb, pinned_ip, port
+        )
 
-    def _run(self, target: str, progress_cb=None, pinned_ip: str | None = None) -> list[dict]:
+    def _run(self, target: str, progress_cb=None, pinned_ip: str | None = None,
+             port: int | None = None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
+        # TLS lives on 443 unless the target named another port.
+        tls_port = port or 443
         findings = []
 
         # Connect to the pinned (validated) IP if provided, but keep SNI +
@@ -35,7 +41,7 @@ class SSLScanner:
             raw_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             raw_ctx.check_hostname = False
             raw_ctx.verify_mode = ssl.CERT_NONE
-            with socket.create_connection((connect_host, 443), timeout=10) as sock:
+            with socket.create_connection((connect_host, tls_port), timeout=10) as sock:
                 with raw_ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
                     protocol = ssock.version()
                     cipher_info = ssock.cipher()
@@ -77,9 +83,9 @@ class SSLScanner:
 
         except (ConnectionRefusedError, socket.timeout, OSError):
             findings.append(self._f(
-                "HTTPS not available on port 443",
+                f"HTTPS not available on port {tls_port}",
                 "HIGH",
-                "Port 443 is not open or HTTPS is not configured.",
+                f"Port {tls_port} is not open or HTTPS is not configured.",
                 "Enable HTTPS and obtain a valid TLS certificate.",
                 "CWE-319", "A02", "delivery", "T1557",
             ))
@@ -93,7 +99,7 @@ class SSLScanner:
         # ── Validated connection ──────────────────────────────────
         try:
             ctx = ssl.create_default_context()
-            with socket.create_connection((connect_host, 443), timeout=10) as sock:
+            with socket.create_connection((connect_host, tls_port), timeout=10) as sock:
                 with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
                     cert = ssock.getpeercert()
 
@@ -154,7 +160,8 @@ class SSLScanner:
                     timeout=10,
                     headers={"User-Agent": "Bulwark-Scanner/2.0"},
                 ) as client:
-                    r = await client.get(f"https://{hostname}/")
+                    authority = f"{hostname}:{tls_port}" if tls_port != 443 else hostname
+                    r = await client.get(f"https://{authority}/")
                     return r.headers.get("Strict-Transport-Security", "")
 
             # _run executes in a thread executor, so there is no loop here and

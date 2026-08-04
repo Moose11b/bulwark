@@ -112,7 +112,7 @@ The split is deliberate: the engine is decoupled from storage so it runs in a 3-
 ```bash
 cp .env.example .env     # add your Clerk keys (see .env.example)
 docker compose up --build
-# dashboard -> http://localhost:3000
+# dashboard -> http://localhost:3001
 # API docs  -> http://localhost:8000/docs
 ```
 
