@@ -31,10 +31,6 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/1
       CELERY_RESULT_BACKEND: redis://localhost:6379/2
-      # Throwaway signing key. The webhook tests sign and verify with the same
-      # configured value, so any well-formed svix secret round-trips; the
-      # router rejects an unset or placeholder secret with a 500.
-      CLERK_WEBHOOK_SECRET: whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw
     steps:
       - uses: actions/checkout@v5
 
@@ -43,6 +39,12 @@ jobs:
 
       - name: Create tables and run pytest
         run: |
+          # Generated per run rather than hardcoded: a literal whsec_ value in
+          # the repo trips GitHub secret scanning even though it is worthless.
+          # The webhook tests sign and verify with the same configured value,
+          # so any well-formed svix secret round-trips. The route rejects an
+          # unset or placeholder secret with a 500, hence the need for one.
+          export CLERK_WEBHOOK_SECRET="whsec_$(openssl rand -base64 24)"
           docker run --rm --network host \
             -e DATABASE_URL -e REDIS_URL \
             -e CELERY_BROKER_URL -e CELERY_RESULT_BACKEND \
