@@ -31,6 +31,10 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/1
       CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      # Throwaway signing key. The webhook tests sign and verify with the same
+      # configured value, so any well-formed svix secret round-trips; the
+      # router rejects an unset or placeholder secret with a 500.
+      CLERK_WEBHOOK_SECRET: whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +46,7 @@ jobs:
           docker run --rm --network host \
             -e DATABASE_URL -e REDIS_URL \
             -e CELERY_BROKER_URL -e CELERY_RESULT_BACKEND \
+            -e CLERK_WEBHOOK_SECRET \
             bulwark-backend:test \
             sh -c "python -c 'import asyncio; from app.database import create_tables; asyncio.run(create_tables())' && pytest"
 

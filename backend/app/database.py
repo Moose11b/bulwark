@@ -47,5 +47,15 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def create_tables() -> None:
+    """Create any missing tables.
+
+    Importing app.models here is load-bearing, not decorative: create_all only
+    emits DDL for tables registered on Base.metadata, and that registration is
+    a side effect of importing the model classes. Called without that import,
+    this silently creates nothing and returns successfully — the app happens to
+    work only because main.py imports routers (and therefore models) first.
+    """
+    import app.models  # noqa: F401  — registers tables on Base.metadata
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
