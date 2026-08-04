@@ -1,0 +1,8 @@
+# Minimal dependencies for the standalone Bulwark CLI (no DB/web server).
+httpx==0.28.0
+dnspython==2.7.0
+python-nmap==0.7.1
+beautifulsoup4==4.12.3
+structlog==24.4.0
+pydantic==2.10.1
+pydantic-settings==2.6.1

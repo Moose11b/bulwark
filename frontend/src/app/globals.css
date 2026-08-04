@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Bulwark light mode ────────────────────────── */
+    --background: 214 32% 97%;
+    --foreground: 217 33% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 217 33% 8%;
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --primary: 221 83% 47%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 20% 94%;
+    --secondary-foreground: 217 33% 8%;
+    --muted: 214 20% 94%;
+    --muted-foreground: 215 14% 45%;
+    --accent: 214 20% 91%;
+    --accent-foreground: 217 33% 8%;
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 221 83% 47%;
+    --radius: 0.5rem;
+
+    /* ── Bulwark brand tokens ──────────────────────── */
+    --bulwark-fortress:  #0C1628;
+    --bulwark-rampart:   #0F172A;
+    --bulwark-bastion:   #1E293B;
+    --bulwark-steel:     #334155;
+    --bulwark-blue:      #1D4ED8;
+    --bulwark-blue-mid:  #2563EB;
+    --bulwark-parapet:   #60A5FA;
+    --bulwark-amber:     #F59E0B;
+    --bulwark-amber-dim: #D97706;
+  }
+
+  .dark {
+    /* ── Bulwark dark mode ─────────────────────────── */
+    --background: 222 47% 5%;
+    --foreground: 213 31% 91%;
+    --card: 222 42% 8%;
+    --card-foreground: 213 31% 91%;
+    --border: 217 33% 14%;
+    --input: 217 33% 14%;
+    --primary: 217 91% 65%;
+    --primary-foreground: 222 47% 5%;
+    --secondary: 217 33% 12%;
+    --secondary-foreground: 213 31% 91%;
+    --muted: 217 33% 12%;
+    --muted-foreground: 215 20% 52%;
+    --accent: 217 33% 14%;
+    --accent-foreground: 213 31% 91%;
+    --destructive: 0 63% 35%;
+    --destructive-foreground: 213 31% 91%;
+    --ring: 217 91% 65%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+
+  /* Smooth scrollbars */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-muted; }
+  ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
+}
+
+/* ── Severity colours ──────────────────────────────── */
+.sev-critical { color: #FCA5A5; }
+.sev-high     { color: #FDBA74; }
+.sev-medium   { color: #FDE68A; }
+.sev-low      { color: #86EFAC; }
+.sev-info     { color: #93C5FD; }
+.sev-pass     { @apply text-muted-foreground; }
+
+.badge-critical { background: #7F1D1D33; color: #FCA5A5; border-color: #7F1D1D55; }
+.badge-high     { background: #7C2D1233; color: #FDBA74; border-color: #7C2D1255; }
+.badge-medium   { background: #71360233; color: #FDE68A; border-color: #71360255; }
+.badge-low      { background: #14532D33; color: #86EFAC; border-color: #14532D55; }
+.badge-info     { background: #1E3A5F33; color: #93C5FD; border-color: #1E3A5F55; }
+.badge-pass     { background: #1E293B33; color: #94A3B8; border-color: #1E293B55; }
+
+/* ── Bulwark UI utilities ──────────────────────────── */
+.bulwark-card {
+  @apply rounded-lg border bg-card text-card-foreground;
+}
+.bulwark-surface {
+  background: hsl(var(--card));
+  border: 0.5px solid hsl(var(--border));
+  border-radius: var(--radius);
+}

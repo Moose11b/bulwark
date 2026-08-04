@@ -1,0 +1,60 @@
+# ── Secrets & environment ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ── Python ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Node / Next.js ───────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Build & scan artifacts ───────────────────────────────────────
+*.sarif
+bulwark-results.json
+bulwark-results.sarif
+out.json
+out.sarif
+reports/
+*.pdf
+!docs/**/*.pdf
+
+# ── Docker ───────────────────────────────────────────────────────
+.docker/
+
+# ── IDE / OS ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+build_log.txt
+frontend_log.txt
+
+.claude/
+
+.claude/

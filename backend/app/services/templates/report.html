@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulwark Security Report — {{ scan.target }}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #1E293B;
+    background: #ffffff;
+  }
+
+  /* ── Cover page ─────────────────────────────────── */
+  .cover {
+    height: 100vh;
+    background: #0C1628;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 60px;
+    page-break-after: always;
+  }
+  .cover-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .cover-logo-mark {
+    width: 48px;
+    height: 48px;
+    background: #1D4ED8;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cover-wordmark {
+    font-size: 22pt;
+    font-weight: 700;
+    color: #E2E8F0;
+    letter-spacing: 0.12em;
+  }
+  .cover-main { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .cover-report-type {
+    font-size: 11pt;
+    font-weight: 500;
+    color: #60A5FA;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .cover-title {
+    font-size: 28pt;
+    font-weight: 700;
+    color: #F1F5F9;
+    margin-bottom: 8px;
+    line-height: 1.2;
+  }
+  .cover-target {
+    font-size: 16pt;
+    color: #94A3B8;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 40px;
+  }
+  .cover-meta {
+    display: flex;
+    gap: 40px;
+  }
+  .cover-meta-item label {
+    font-size: 9pt;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .cover-meta-item span {
+    font-size: 12pt;
+    color: #CBD5E1;
+    font-weight: 500;
+  }
+  .cover-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid #1E3A5F;
+    padding-top: 24px;
+  }
+  .cover-tagline {
+    font-size: 10pt;
+    color: #334155;
+    letter-spacing: 0.1em;
+  }
+  .cover-risk {
+    text-align: right;
+  }
+  .cover-risk-score {
+    font-size: 36pt;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .cover-risk-label {
+    font-size: 9pt;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Page layout ────────────────────────────────── */
+  @page {
+    margin: 20mm 20mm 25mm 20mm;
+    @bottom-center {
+      content: "Bulwark Security Report — " string(target) " — Page " counter(page);
+      font-size: 8pt;
+      color: #94A3B8;
+      font-family: 'Inter', sans-serif;
+    }
+  }
+
+  .page-header {
+    border-bottom: 2px solid #1D4ED8;
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+  .page-header h1 {
+    font-size: 18pt;
+    font-weight: 700;
+    color: #0C1628;
+  }
+  .page-header .section-label {
+    font-size: 9pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Executive summary ──────────────────────────── */
+  .exec-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-card .stat-label {
+    font-size: 8pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .stat-card .stat-value {
+    font-size: 22pt;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  /* ── Risk score bar ─────────────────────────────── */
+  .risk-bar-wrap {
+    background: #F1F5F9;
+    border-radius: 4px;
+    height: 12px;
+    margin-bottom: 4px;
+    overflow: hidden;
+  }
+  .risk-bar-fill {
+    height: 12px;
+    border-radius: 4px;
+  }
+
+  /* ── Severity badge ─────────────────────────────── */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 8pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge-CRITICAL { background: #FEE2E2; color: #991B1B; }
+  .badge-HIGH     { background: #FFEDD5; color: #9A3412; }
+  .badge-MEDIUM   { background: #FEF9C3; color: #854D0E; }
+  .badge-LOW      { background: #DCFCE7; color: #166534; }
+  .badge-INFO     { background: #EFF6FF; color: #1E40AF; }
+  .badge-PASS     { background: #F1F5F9; color: #64748B; }
+
+  /* ── Section headings ───────────────────────────── */
+  h2 {
+    font-size: 15pt;
+    font-weight: 700;
+    color: #0C1628;
+    margin: 28px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #E2E8F0;
+  }
+  h3 {
+    font-size: 12pt;
+    font-weight: 600;
+    color: #1E293B;
+    margin: 20px 0 10px;
+  }
+
+  /* ── Finding card ───────────────────────────────── */
+  .finding-card {
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    page-break-inside: avoid;
+    overflow: hidden;
+  }
+  .finding-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .finding-header-left {
+    flex: 1;
+  }
+  .finding-title {
+    font-size: 11pt;
+    font-weight: 600;
+    color: #0C1628;
+    margin-bottom: 4px;
+  }
+  .finding-meta {
+    font-size: 8pt;
+    color: #94A3B8;
+  }
+  .finding-meta span { margin-right: 12px; }
+  .finding-body {
+    padding: 12px 16px;
+    background: #F8FAFC;
+    border-top: 1px solid #F1F5F9;
+  }
+  .finding-body p {
+    font-size: 10pt;
+    color: #334155;
+    margin-bottom: 8px;
+  }
+  .finding-body .label {
+    font-size: 8pt;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 3px;
+  }
+  .finding-body .value {
+    font-size: 10pt;
+    color: #1E293B;
+    margin-bottom: 12px;
+  }
+  .evidence-box {
+    background: #0C1628;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8pt;
+    color: #94A3B8;
+    margin-top: 6px;
+    word-break: break-all;
+  }
+  .remediation-box {
+    background: #ECFDF5;
+    border: 1px solid #A7F3D0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 10pt;
+    color: #065F46;
+    margin-top: 6px;
+  }
+
+  /* ── OWASP table ────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 10pt;
+  }
+  th {
+    background: #0C1628;
+    color: #94A3B8;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #F1F5F9;
+    color: #334155;
+  }
+  tr:nth-child(even) td { background: #F8FAFC; }
+  td code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9pt;
+    background: #F1F5F9;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #1D4ED8;
+  }
+
+  /* ── Kill chain bar ─────────────────────────────── */
+  .killchain-wrap {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+  .kc-phase {
+    flex: 1;
+    text-align: center;
+  }
+  .kc-bar {
+    height: 32px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11pt;
+  }
+  .kc-label {
+    font-size: 7pt;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .kc-count {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #0C1628;
+    margin-top: 2px;
+  }
+
+  /* ── Compliance grid ────────────────────────────── */
+  .compliance-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .compliance-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .compliance-card .framework { font-size: 9pt; color: #94A3B8; margin-bottom: 6px; }
+  .compliance-card .controls  { font-size: 20pt; font-weight: 700; color: #0C1628; }
+  .compliance-card .controls-label { font-size: 8pt; color: #64748B; }
+
+  /* ── Footer brand ───────────────────────────────── */
+  .report-footer {
+    text-align: center;
+    padding: 24px 0;
+    border-top: 1px solid #E2E8F0;
+    margin-top: 40px;
+  }
+  .report-footer p {
+    font-size: 9pt;
+    color: #CBD5E1;
+  }
+
+  /* Utilities */
+  .text-critical { color: #DC2626; }
+  .text-high     { color: #EA580C; }
+  .text-medium   { color: #CA8A04; }
+  .text-low      { color: #16A34A; }
+  .text-info     { color: #2563EB; }
+  .page-break    { page-break-before: always; }
+  .no-break      { page-break-inside: avoid; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-20 { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<!-- ── Cover ─────────────────────────────────────── -->
+<div class="cover">
+  <div class="cover-logo">
+    <div class="cover-logo-mark">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z" fill="#EFF6FF"/>
+        <path d="M9 12l2 2 4-4" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="cover-wordmark">BULWARK</span>
+  </div>
+
+  <div class="cover-main">
+    <div class="cover-report-type">{{ report_type }} Security Report</div>
+    <div class="cover-title">Vulnerability Assessment</div>
+    <div class="cover-target">{{ scan.target }}</div>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <label>Scan date</label>
+        <span>{{ scan.created_at_fmt }}</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Scan type</label>
+        <span>{{ scan.scan_type | upper }}</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Duration</label>
+        <span>{{ scan.duration }}</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Total findings</label>
+        <span>{{ findings | length }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cover-footer">
+    <div class="cover-tagline">FORTIFY · DETECT · DEFEND</div>
+    <div class="cover-risk">
+      <div class="cover-risk-score"
+        style="color: {{ risk_color }}">{{ risk_score }}</div>
+      <div class="cover-risk-label">Risk score / 100</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Executive summary ──────────────────────────── -->
+<div class="page-header">
+  <div class="section-label">Section 01</div>
+  <h1>Executive Summary</h1>
+</div>
+
+<div class="exec-grid">
+  <div class="stat-card">
+    <div class="stat-label">Risk score</div>
+    <div class="stat-value" style="color: {{ risk_color }}">{{ risk_score }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Critical</div>
+    <div class="stat-value text-critical">{{ counts.CRITICAL }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">High</div>
+    <div class="stat-value text-high">{{ counts.HIGH }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Medium</div>
+    <div class="stat-value text-medium">{{ counts.MEDIUM }}</div>
+  </div>
+</div>
+
+<p style="color:#334155; margin-bottom:16px;">
+  A {{ report_type | lower }} vulnerability assessment was performed against
+  <strong>{{ scan.target }}</strong> on {{ scan.created_at_fmt }} using Bulwark's
+  automated scanning pipeline. The scan identified <strong>{{ findings | length }} findings</strong>
+  across {{ owasp_hit }} OWASP Top 10 categories and {{ exposed_phases }} of 7 kill chain phases.
+</p>
+
+{% if counts.CRITICAL > 0 or counts.HIGH > 0 %}
+<div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:14px; margin-bottom:20px;">
+  <p style="color:#991B1B; font-weight:600; margin-bottom:6px;">⚠ Immediate action required</p>
+  <p style="color:#7F1D1D; font-size:10pt;">
+    {{ counts.CRITICAL }} critical and {{ counts.HIGH }} high severity findings require
+    immediate remediation. Critical findings may allow complete system compromise.
+  </p>
+</div>
+{% endif %}
+
+<!-- Risk bar -->
+<div class="mb-12">
+  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+    <span style="font-size:9pt; color:#64748B;">Overall risk score</span>
+    <span style="font-size:9pt; font-weight:600; color:{{ risk_color }};">{{ risk_score }}/100</span>
+  </div>
+  <div class="risk-bar-wrap">
+    <div class="risk-bar-fill" style="width:{{ risk_score }}%; background:{{ risk_color }};"></div>
+  </div>
+</div>
+
+<!-- Top 5 findings table -->
+<h2>Top Findings</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:45%">Finding</th>
+      <th>Severity</th>
+      <th>OWASP</th>
+      <th>Source</th>
+      <th>CVSS</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in top_findings %}
+    <tr>
+      <td>{{ f.title | truncate(60) }}</td>
+      <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
+      <td><code>{{ f.owasp_category or '—' }}</code></td>
+      <td>{{ f.source }}</td>
+      <td>{% if f.cvss_score %}{{ '%.1f' | format(f.cvss_score) }}{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ── Kill chain ──────────────────────────────────── -->
+<div class="page-break"></div>
+<div class="page-header">
+  <div class="section-label">Section 02</div>
+  <h1>Cyber Kill Chain Analysis</h1>
+</div>
+
+<p style="color:#334155; margin-bottom:20px;">
+  Findings have been mapped to the Lockheed Martin Cyber Kill Chain to identify
+  which phases of an attack the target is exposed to. The adversary's furthest
+  confirmed phase is <strong>Phase {{ highest_phase }}: {{ highest_phase_name }}</strong>.
+</p>
+
+<div class="killchain-wrap">
+  {% for phase in kc_phases %}
+  <div class="kc-phase">
+    <div class="kc-bar" style="background: {{ phase.bg }};">
+      <span style="font-size:14pt;">{{ phase.icon }}</span>
+    </div>
+    <div class="kc-label">{{ phase.name[:10] }}</div>
+    <div class="kc-count" style="color:{{ phase.color }};">{{ phase.count }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<table>
+  <thead><tr><th>Phase</th><th>Name</th><th>Findings</th><th>Defender action</th></tr></thead>
+  <tbody>
+    {% for phase in kc_phases %}
+    {% if phase.count > 0 %}
+    <tr>
+      <td>{{ phase.phase }}</td>
+      <td>{{ phase.name }}</td>
+      <td><strong style="color:{{ phase.color }}">{{ phase.count }}</strong></td>
+      <td style="font-size:9pt; color:#64748B;">{{ phase.defender_action }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ── OWASP Top 10 ────────────────────────────────── -->
+<h2>OWASP Top 10 Mapping</h2>
+
+<table>
+  <thead><tr><th>Code</th><th>Category</th><th>Risk</th><th>Findings</th></tr></thead>
+  <tbody>
+    {% for cat in owasp_categories %}
+    <tr>
+      <td><code>{{ cat.code }}</code></td>
+      <td>{{ cat.name }}</td>
+      <td>{{ cat.risk }}</td>
+      <td>{% if cat.count > 0 %}<strong>{{ cat.count }}</strong>{% else %}0{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ── Compliance ──────────────────────────────────── -->
+<h2>Compliance Impact</h2>
+<div class="compliance-grid" style="grid-template-columns: repeat(4, 1fr);">
+  <div class="compliance-card">
+    <div class="framework">PCI-DSS v4.0</div>
+    <div class="controls">{{ pci_controls }}</div>
+    <div class="controls-label">controls relevant</div>
+  </div>
+  <div class="compliance-card">
+    <div class="framework">ISO 27001:2022</div>
+    <div class="controls">{{ iso_controls }}</div>
+    <div class="controls-label">controls relevant</div>
+  </div>
+  <div class="compliance-card">
+    <div class="framework">NIST CSF 2.0</div>
+    <div class="controls">{{ nist_controls }}</div>
+    <div class="controls-label">controls relevant</div>
+  </div>
+  <div class="compliance-card">
+    <div class="framework">CIS Controls v8</div>
+    <div class="controls">{{ cis_controls }}</div>
+    <div class="controls-label">controls relevant</div>
+  </div>
+</div>
+
+<div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:12px 14px; margin-top:8px;">
+  <p style="font-size:8pt; font-weight:700; color:#92400E; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">
+    Control mapping disclaimer
+  </p>
+  <p style="font-size:8.5pt; color:#78350F; line-height:1.5;">
+    {{ compliance_disclaimer }}
+  </p>
+</div>
+
+{% if report_type == 'Full' %}
+<!-- ── Full findings ───────────────────────────────── -->
+<div class="page-break"></div>
+<div class="page-header">
+  <div class="section-label">Section 03</div>
+  <h1>Full Findings ({{ findings | length }})</h1>
+</div>
+
+{% for f in findings %}
+<div class="finding-card">
+  <div class="finding-header" style="background: {{ f.header_bg }};">
+    <div class="finding-header-left">
+      <div class="finding-title">{{ f.title }}</div>
+      <div class="finding-meta">
+        <span>{{ f.source }}</span>
+        {% if f.cve_id %}<span>{{ f.cve_id }}</span>{% endif %}
+        {% if f.owasp_category %}<span>OWASP {{ f.owasp_category }}</span>{% endif %}
+        {% if f.cvss_score %}<span>CVSS {{ '%.1f' | format(f.cvss_score) }}</span>{% endif %}
+        {% if f.is_in_kev %}<span style="color:#DC2626; font-weight:600;">CISA KEV</span>{% endif %}
+      </div>
+    </div>
+    <span class="badge badge-{{ f.severity }}">{{ f.severity }}</span>
+  </div>
+  <div class="finding-body">
+    {% if f.description %}
+    <div class="label">Description</div>
+    <div class="value">{{ f.description }}</div>
+    {% endif %}
+    {% if f.evidence %}
+    <div class="label">Evidence</div>
+    <div class="evidence-box">{{ f.evidence }}</div>
+    {% endif %}
+    {% if f.remediation %}
+    <div class="label" style="margin-top:10px;">Remediation</div>
+    <div class="remediation-box">{{ f.remediation }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- ── Footer ──────────────────────────────────────── -->
+<div class="report-footer">
+  <p>Generated by Bulwark Security Platform · Fortify · Detect · Defend</p>
+  <p style="margin-top:4px;">{{ scan.target }} · {{ scan.created_at_fmt }}</p>
+</div>
+
+</body>
+</html>

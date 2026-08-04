@@ -1,0 +1,32 @@
+# Example: dynamic security gate on every PR.
+# Copy this into a target repo's .github/workflows/ to use Bulwark.
+name: DAST Security Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  bulwark-dast:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # required to upload SARIF to the Security tab
+    steps:
+      - uses: actions/checkout@v4
+
+      # Start the application under test however your project does it.
+      # The app must be reachable from the runner before the scan step.
+      - name: Start app
+        run: |
+          docker compose up -d
+          # wait for it to be ready
+          timeout 60 bash -c 'until curl -sf http://localhost:3000 >/dev/null; do sleep 2; done'
+
+      - name: Bulwark DAST gate
+        uses: moose11b/bulwark@v1
+        with:
+          target: http://localhost:3000
+          profile: web
+          fail-on: high

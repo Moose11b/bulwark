@@ -1,0 +1,53 @@
+# Bulwark CLI — lean image for CI/CD pipeline scanning.
+# Contains only what the standalone scan engine needs (no Postgres/Redis/Celery).
+FROM python:3.12-slim
+
+# Scanner binaries + minimal build deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap \
+    dnsutils \
+    curl \
+    git \
+    wget \
+    unzip \
+    perl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Nikto from source
+RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
+    ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto && \
+    chmod +x /opt/nikto/program/nikto.pl
+
+# Nuclei
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then NA="amd64"; else NA="arm64"; fi && \
+    NUCLEI_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep '"tag_name"' | cut -d'"' -f4) && \
+    wget -q "https://github.com/projectdiscovery/nuclei/releases/download/${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION#v}_linux_${NA}.zip" -O /tmp/nuclei.zip && \
+    unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin/ && \
+    chmod +x /usr/local/bin/nuclei && \
+    rm /tmp/nuclei.zip && \
+    nuclei -update-templates -silent 2>/dev/null || true
+
+WORKDIR /app
+
+# Only the dependencies the CLI path needs — no DB/web-server packages
+RUN pip install --no-cache-dir \
+    httpx==0.28.0 \
+    dnspython==2.7.0 \
+    python-nmap==0.7.1 \
+    beautifulsoup4==4.12.3 \
+    structlog==24.4.0 \
+    pydantic==2.10.1 \
+    pydantic-settings==2.6.1
+
+# Copy only the app package (engine, scanners, analysis, cli)
+COPY app/ ./app/
+
+ARG BULWARK_VERSION=dev
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    BULWARK_VERSION=${BULWARK_VERSION}
+
+ENTRYPOINT ["python", "-m", "app.cli"]

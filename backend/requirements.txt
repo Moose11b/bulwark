@@ -1,0 +1,58 @@
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+greenlet==3.1.1
+
+# Validation
+pydantic==2.10.1
+pydantic-settings==2.6.1
+email-validator==2.2.0
+
+# Task queue
+celery==5.4.0
+redis==5.2.0
+celery-redbeat==2.2.0
+flower==2.0.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+svix==1.36.0
+
+# HTTP client
+httpx==0.28.0
+requests==2.32.3
+beautifulsoup4==4.12.3
+
+# Security scanning
+python-nmap==0.7.1
+dnspython==2.7.0
+
+# Billing
+stripe==11.3.0
+
+# Reports
+weasyprint==62.3
+pydyf<0.11   # weasyprint 62.x is incompatible with pydyf>=0.11
+jinja2==3.1.4
+
+# Notifications
+slack-sdk==3.33.4
+aiosmtplib==3.0.2
+
+# Utilities
+python-dotenv==1.0.1
+structlog==24.4.0
+tenacity==9.0.0
+pytz==2024.2
+
+# Tests
+pytest==8.3.4
+pytest-asyncio==0.24.0
+anyio==4.6.2.post1

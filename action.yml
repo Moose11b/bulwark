@@ -1,0 +1,94 @@
+name: 'Bulwark DAST Gate'
+description: 'Dynamic security scan of a running application as a CI gate. Fails the build on findings and uploads SARIF to the Security tab.'
+author: 'moose11b'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  target:
+    description: 'URL, domain, or IP to scan (e.g. http://localhost:3000)'
+    required: true
+  profile:
+    description: 'Scan profile: headers | web | network | full'
+    required: false
+    default: 'web'
+  fail-on:
+    description: 'Fail the build on findings at/above this severity: critical | high | medium | low | never'
+    required: false
+    default: 'high'
+  sarif-file:
+    description: 'Path to write SARIF output'
+    required: false
+    default: 'bulwark-results.sarif'
+  upload-sarif:
+    description: 'Upload SARIF to the GitHub Security tab'
+    required: false
+    default: 'true'
+  no-enrich:
+    description: 'Skip NVD/EPSS/KEV CVE enrichment (faster)'
+    required: false
+    default: 'false'
+
+outputs:
+  findings-count:
+    description: 'Total number of findings'
+    value: ${{ steps.scan.outputs.findings-count }}
+  highest-severity:
+    description: 'Highest severity found'
+    value: ${{ steps.scan.outputs.highest-severity }}
+  gate-passed:
+    description: 'Whether the gate passed (true/false)'
+    value: ${{ steps.scan.outputs.gate-passed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Bulwark scan
+      id: scan
+      shell: bash
+      run: |
+        ENRICH_FLAG=""
+        if [ "${{ inputs.no-enrich }}" = "true" ]; then ENRICH_FLAG="--no-enrich"; fi
+
+        docker run --rm --network host \
+          -v "${{ github.workspace }}:/workspace" \
+          ghcr.io/moose11b/bulwark-cli:latest \
+          scan "${{ inputs.target }}" \
+          --profile "${{ inputs.profile }}" \
+          --fail-on "${{ inputs.fail-on }}" \
+          --sarif "/workspace/${{ inputs.sarif-file }}" \
+          --json "/workspace/bulwark-results.json" \
+          $ENRICH_FLAG
+        echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+        # Parse summary for outputs (non-fatal if jq/file missing)
+        if [ -f "${{ github.workspace }}/bulwark-results.json" ]; then
+          COUNT=$(jq '.summary.total' "${{ github.workspace }}/bulwark-results.json" 2>/dev/null || echo 0)
+          HIGHEST=$(jq -r '.summary.highest_severity' "${{ github.workspace }}/bulwark-results.json" 2>/dev/null || echo "INFO")
+          echo "findings-count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "highest-severity=$HIGHEST" >> "$GITHUB_OUTPUT"
+        fi
+      continue-on-error: true
+
+    - name: Upload SARIF to Security tab
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+      continue-on-error: true
+
+    - name: Enforce gate
+      shell: bash
+      run: |
+        if [ "${{ steps.scan.outputs.exit_code }}" = "1" ]; then
+          echo "::error::Bulwark gate failed — findings at or above '${{ inputs.fail-on }}' severity."
+          echo "gate-passed=false" >> "$GITHUB_OUTPUT"
+          exit 1
+        elif [ "${{ steps.scan.outputs.exit_code }}" = "2" ]; then
+          echo "::error::Bulwark scan errored."
+          exit 1
+        else
+          echo "Bulwark gate passed."
+          echo "gate-passed=true" >> "$GITHUB_OUTPUT"
+        fi

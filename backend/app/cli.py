@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""
+Bulwark CLI — standalone vulnerability scanner for pipelines and local use.
+
+Usage:
+    bulwark scan <target> [options]
+
+Examples:
+    bulwark scan http://localhost:3000
+    bulwark scan example.com --profile full --fail-on high
+    bulwark scan example.com --sarif results.sarif --json results.json
+    bulwark scan example.com --report-to $BULWARK_TOKEN   # send to hosted backend
+
+Exit codes:
+    0  scan completed, no findings at/above --fail-on threshold
+    1  findings met/exceeded the --fail-on threshold (gate failed)
+    2  scan error (target invalid, scanner crash, etc.)
+"""
+import argparse
+import asyncio
+import json
+import sys
+import os
+
+__version__ = os.environ.get("BULWARK_VERSION", "dev")
+
+# ANSI colours (disabled when not a TTY or NO_COLOR set)
+_USE_COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _c(text: str, code: str) -> str:
+    if not _USE_COLOR:
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+SEV_COLOR = {
+    "CRITICAL": "91", "HIGH": "31", "MEDIUM": "33", "LOW": "32", "INFO": "36",
+}
+
+
+def _print_banner():
+    if _USE_COLOR:
+        print(_c("  ⛨  BULWARK", "1;34") + _c("  ·  Fortify · Detect · Defend", "2;37"))
+    else:
+        print("  BULWARK  ·  Fortify · Detect · Defend")
+
+
+def _print_table(result: dict):
+    findings = result["findings"]
+    summary = result["summary"]
+    target = result["target"]
+
+    print()
+    print(f"  Target:   {target}")
+    print(f"  Profile:  {result['profile']}")
+    print(f"  Duration: {result['duration_seconds']}s")
+    print(f"  Findings: {summary['total']}")
+    print()
+
+    if not findings:
+        print(_c("  ✓ No findings.", "32"))
+        return
+
+    # Sort by severity, highest first
+    order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    findings_sorted = sorted(
+        findings, key=lambda f: order.get((f.get("severity") or "INFO").upper(), 9)
+    )
+
+    for f in findings_sorted:
+        sev = (f.get("severity") or "INFO").upper()
+        badge = _c(f"{sev:>8}", SEV_COLOR.get(sev, "37"))
+        title = f.get("title", "Untitled")[:80]
+        src = f.get("source", "")
+        print(f"  {badge}  {title}  {_c(f'({src})', '2;37')}")
+        extras = []
+        if f.get("cve_id"):
+            extras.append(f.get("cve_id"))
+        if f.get("cvss_score"):
+            extras.append(f"CVSS {f['cvss_score']}")
+        if f.get("is_in_kev"):
+            extras.append(_c("CISA-KEV", "91"))
+        if f.get("owasp_category"):
+            extras.append(f"OWASP {f['owasp_category']}")
+        if extras:
+            print(f"            {_c('  '.join(str(e) for e in extras), '2;37')}")
+
+    # Summary line
+    print()
+    parts = []
+    for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]:
+        n = summary["by_severity"].get(sev, 0)
+        if n:
+            parts.append(_c(f"{n} {sev.lower()}", SEV_COLOR.get(sev, "37")))
+    print("  " + "  ".join(parts))
+
+
+async def _send_to_backend(result: dict, token: str, api_url: str):
+    """Optional: POST results to the hosted Bulwark backend (paid tier hook)."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{api_url}/api/ingest/scan-result",
+                json=result,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code in (200, 201, 202):
+                print(_c(f"  ✓ Results sent to {api_url}", "32"))
+            else:
+                print(_c(f"  ! Backend returned {resp.status_code}", "33"))
+    except Exception as e:
+        print(_c(f"  ! Could not reach backend: {e}", "33"))
+
+
+async def _run_scan(args) -> int:
+    from app.services.standalone_engine import StandaloneScanEngine, meets_threshold
+
+    quiet = args.quiet or args.json == "-" or args.sarif == "-"
+
+    def on_progress(pct, msg):
+        if not quiet:
+            sys.stderr.write(f"\r  [{pct:3d}%] {msg:<50}")
+            sys.stderr.flush()
+
+    engine = StandaloneScanEngine(
+        enrich=not args.no_enrich,
+        on_progress=on_progress if not quiet else None,
+        allow_private=args.allow_private,
+    )
+
+    try:
+        result = await engine.scan(args.target, profile=args.profile)
+    except ValueError as e:
+        print(_c(f"\n  ✗ {e}", "31"), file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(_c(f"\n  ✗ Scan failed: {e}", "31"), file=sys.stderr)
+        return 2
+
+    if not quiet:
+        sys.stderr.write("\r" + " " * 70 + "\r")
+
+    # ── Outputs ──────────────────────────────────────────────────
+    # JSON
+    if args.json:
+        payload = json.dumps(result, indent=2)
+        if args.json == "-":
+            print(payload)
+        else:
+            with open(args.json, "w") as fh:
+                fh.write(payload)
+            if not quiet:
+                print(_c(f"  ✓ JSON written to {args.json}", "32"))
+
+    # SARIF
+    if args.sarif:
+        from app.services.sarif import to_sarif
+        sarif = to_sarif(result, version=__version__)
+        if args.sarif == "-":
+            print(sarif)
+        else:
+            with open(args.sarif, "w") as fh:
+                fh.write(sarif)
+            if not quiet:
+                print(_c(f"  ✓ SARIF written to {args.sarif}", "32"))
+
+    # Human table (unless purely machine output)
+    if not quiet and args.json != "-" and args.sarif != "-":
+        _print_table(result)
+
+    # Optional backend reporting (paid-tier seam)
+    if args.report_to:
+        await _send_to_backend(result, args.report_to, args.api_url)
+
+    # ── Gate decision ────────────────────────────────────────────
+    if meets_threshold(result["summary"], args.fail_on):
+        if not quiet:
+            print()
+            print(_c(f"  ✗ Gate failed: findings at or above '{args.fail_on}' severity.", "1;31"))
+        return 1
+
+    if not quiet:
+        print()
+        print(_c(f"  ✓ Gate passed (threshold: {args.fail_on}).", "1;32"))
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="bulwark",
+        description="Bulwark — standalone vulnerability scanner for CI/CD pipelines.",
+    )
+    parser.add_argument("--version", action="version",
+                        version=f"bulwark {__version__}")
+    sub = parser.add_subparsers(dest="command")
+
+    scan = sub.add_parser("scan", help="Scan a target")
+    scan.add_argument("target", help="URL, domain, or IP to scan")
+    scan.add_argument("--profile", default="web",
+                      choices=["headers", "web", "network", "full"],
+                      help="Scan profile (default: web)")
+    scan.add_argument("--fail-on", default="high",
+                      choices=["critical", "high", "medium", "low", "never"],
+                      help="Fail (exit 1) if findings at/above this severity (default: high)")
+    scan.add_argument("--sarif", metavar="FILE",
+                      help="Write SARIF output to FILE (use '-' for stdout)")
+    scan.add_argument("--json", metavar="FILE",
+                      help="Write JSON output to FILE (use '-' for stdout)")
+    scan.add_argument("--no-enrich", action="store_true",
+                      help="Skip NVD/EPSS/KEV CVE enrichment (faster, offline)")
+    scan.add_argument("--allow-private", action="store_true",
+                      help="Allow scanning internal/loopback/private addresses. "
+                           "ONLY for trusted local or CI scans you are authorised to run. "
+                           "Disables SSRF protection — never use against untrusted input.")
+    scan.add_argument("--quiet", action="store_true",
+                      help="Suppress progress and table output")
+    scan.add_argument("--report-to", metavar="TOKEN", default=os.environ.get("BULWARK_TOKEN"),
+                      help="Send results to hosted Bulwark backend (token or $BULWARK_TOKEN)")
+    scan.add_argument("--api-url", default=os.environ.get("BULWARK_API_URL", "https://api.bulwark.dev"),
+                      help="Hosted backend URL (default: $BULWARK_API_URL)")
+
+    args = parser.parse_args(argv)
+
+    if args.command != "scan":
+        parser.print_help()
+        return 0
+
+    _print_banner() if not args.quiet else None
+    return asyncio.run(_run_scan(args))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

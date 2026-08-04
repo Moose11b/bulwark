@@ -1,0 +1,67 @@
+# CI: on every push/PR, build the CLI image and prove it actually works —
+# it should produce findings against a known-vulnerable app and the gate
+# logic (exit codes) should behave. This is also a live self-test of the
+# scanner pipeline.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build CLI image
+        run: docker build -f backend/Dockerfile.cli -t bulwark-cli:test ./backend
+
+      - name: Start a deliberately-vulnerable target
+        run: |
+          # OWASP Juice Shop — intentionally insecure, safe to scan
+          docker run -d --name juice -p 3000:3000 bkimminich/juice-shop
+          timeout 90 bash -c 'until curl -sf http://localhost:3000 >/dev/null; do sleep 3; done'
+
+      - name: Run headers scan (should produce findings)
+        run: |
+          docker run --rm --network host -v "$PWD:/work" \
+            bulwark-cli:test scan http://localhost:3000 \
+            --profile headers --fail-on never --allow-private \
+            --json /work/out.json --no-enrich
+          echo "--- summary ---"
+          cat out.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print("findings:", d["summary"]["total"]); assert d["summary"]["total"] > 0, "expected findings against juice-shop"'
+
+      - name: Verify SARIF output is valid
+        run: |
+          docker run --rm --network host -v "$PWD:/work" \
+            bulwark-cli:test scan http://localhost:3000 \
+            --profile headers --fail-on never --allow-private \
+            --sarif /work/out.sarif --quiet --no-enrich
+          python3 -c 'import json; s=json.load(open("out.sarif")); assert s["version"]=="2.1.0"; assert s["runs"][0]["tool"]["driver"]["name"]=="Bulwark"; print("SARIF valid:", len(s["runs"][0]["results"]), "results")'
+
+      - name: Verify gate fails on findings
+        run: |
+          set +e
+          docker run --rm --network host \
+            bulwark-cli:test scan http://localhost:3000 \
+            --profile headers --fail-on low --allow-private --quiet --no-enrich
+          CODE=$?
+          set -e
+          echo "exit code: $CODE"
+          if [ "$CODE" != "1" ]; then echo "expected gate to fail (exit 1)"; exit 1; fi
+          echo "gate correctly failed the build"
+
+      - name: Verify SSRF protection blocks internal targets
+        run: |
+          set +e
+          docker run --rm bulwark-cli:test scan http://127.0.0.1 --quiet --no-enrich
+          CODE=$?
+          set -e
+          if [ "$CODE" != "2" ]; then echo "expected SSRF block (exit 2)"; exit 1; fi
+          echo "SSRF protection correctly blocked loopback"
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f juice || true
