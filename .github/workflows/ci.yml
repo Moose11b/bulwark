@@ -36,7 +36,7 @@ jobs:
       # router rejects an unset or placeholder secret with a 500.
       CLERK_WEBHOOK_SECRET: whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t bulwark-backend:test ./backend
@@ -53,7 +53,7 @@ jobs:
   build-and-smoke-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build CLI image
         run: docker build -f backend/Dockerfile.cli -t bulwark-cli:test ./backend
