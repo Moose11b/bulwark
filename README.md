@@ -118,6 +118,36 @@ docker compose up --build
 
 ---
 
+## Authentication
+
+Bulwark authenticates API requests with signed JWTs, verified against a
+**configured** issuer — a token's own issuer claim never decides which keys to
+trust.
+
+- **Clerk** (default): set `CLERK_PUBLISHABLE_KEY`; the trusted issuer is
+  derived from it, or set `CLERK_ISSUER` to override.
+- **Self-hosted OIDC**: set `OIDC_ISSUER` (and `OIDC_CLIENT_ID`) to use your
+  own provider — Keycloak, Authentik, Authelia, or any OIDC-compliant IdP.
+  With `OIDC_AUTO_PROVISION=true`, a user is created on first valid login; the
+  first user into the default organisation becomes its admin.
+
+## Upgrading
+
+Schema changes are managed by Alembic and applied automatically on startup.
+
+Upgrading from v1.0.x needs no manual step: those installs predate Alembic, so
+the first start detects the existing tables, stamps them at the baseline
+revision, and applies anything newer. Migrations run behind a Postgres advisory
+lock, so bringing up the API and workers together is safe.
+
+To apply migrations manually instead:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Take a database backup before upgrading, as with any schema change.
+
 ## Responsible use
 
 Only scan systems you own or are explicitly authorised to test. Unauthorised scanning may be illegal. Bulwark blocks internal/loopback/metadata addresses by default, but you are responsible for having permission to scan any target.

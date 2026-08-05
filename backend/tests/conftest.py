@@ -41,6 +41,8 @@ from app.main import app  # noqa: E402
 from app.models import (  # noqa: E402
     AlertConfig,
     Asset,
+    AssetCredential,
+    AuditLog,
     Finding,
     Organisation,
     PlanTier,
@@ -93,6 +95,10 @@ async def test_user_and_org():
         await db.execute(delete(Finding).where(Finding.org_id == org_id))
         await db.execute(delete(ScanSchedule).where(ScanSchedule.org_id == org_id))
         await db.execute(delete(Scan).where(Scan.org_id == org_id))
+        # Audit rows reference the user, and credentials reference the asset,
+        # so both must go before their parents.
+        await db.execute(delete(AuditLog).where(AuditLog.org_id == org_id))
+        await db.execute(delete(AssetCredential).where(AssetCredential.org_id == org_id))
         await db.execute(delete(Asset).where(Asset.org_id == org_id))
         await db.execute(delete(AlertConfig).where(AlertConfig.org_id == org_id))
         await db.execute(delete(User).where(User.org_id == org_id))

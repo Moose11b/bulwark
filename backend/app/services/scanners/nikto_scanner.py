@@ -63,76 +63,85 @@ def _classify_owasp(msg: str) -> tuple[str, str, str]:
     return "A05", "reconnaissance", "T1595"
 
 
-def _parse_nikto_output(raw: str, target: str) -> list[dict]:
-    findings = []
-    lines = raw.splitlines()
+# Lines Nikto prefixes with '+' that describe the run rather than the target.
+# Without this filter the scan's own end timestamp and request tally were
+# reported as security findings.
+_NIKTO_NON_FINDING = re.compile(
+    r"^(?:"
+    r"Target\s+(?:IP|Hostname|Port)"
+    r"|Start\s+Time|End\s+Time"
+    r"|\d[\d,]*\s+requests?:"           # "8724 requests: 0 error(s) and ..."
+    r"|\d+\s+host\(s\)\s+tested"
+    r"|No CGI Directories found"
+    r"|Nikto v"
+    r")",
+    re.IGNORECASE,
+)
 
-    for line in lines:
+# Below this length a '+' line is a fragment rather than a described issue.
+_MIN_FINDING_LENGTH = 20
+
+
+def _parse_nikto_output(raw: str, target: str) -> list[dict]:
+    """Turn Nikto's text report into findings.
+
+    Only '+ ' lines carry results; everything else is banner or separator.
+    Metadata lines are filtered explicitly rather than by pattern-guessing, so
+    a new Nikto version adding a summary line cannot become a fake finding.
+    """
+    findings = []
+
+    for line in raw.splitlines():
         line = line.strip()
-        if not line:
+        if not line.startswith("+ "):
             continue
-        # Skip header/info lines
-        if line.startswith(("-", "+", "- Nikto", "+ Target", "+ Start Time",
-                             "- Testing", "+ End Time", "+ 1 host")):
-            if line.startswith("+ OSVDB") or "+ " in line:
-                # Actual finding
-                pass
-            elif not line.startswith("+ OSVDB") and "OSVDB" not in line and ":" not in line:
+
+        content = line[2:].strip()
+        if not content or _NIKTO_NON_FINDING.match(content):
+            continue
+
+        if content.startswith("OSVDB"):
+            # Format: OSVDB-XXXXX: /path: description
+            ref, _, rest = content.partition(":")
+            ref = ref.strip()
+            rest = rest.strip()
+
+            path_match = re.match(r'(/[^\s:]*)?:?\s*(.*)', rest)
+            path = (path_match.group(1) or "") if path_match else ""
+            desc = (path_match.group(2) or rest) if path_match else rest
+            if not desc:
                 continue
 
-        if line.startswith("+ OSVDB"):
-            # Format: + OSVDB-XXXXX: /path: description
-            parts = line.split(":", 1)
-            if len(parts) >= 2:
-                ref = parts[0].strip("+ ").strip()
-                rest = parts[1].strip()
-                # Extract path if present
-                path_match = re.match(r'(/[^\s:]*)?:?\s*(.*)', rest)
-                path = path_match.group(1) or "" if path_match else ""
-                desc = path_match.group(2) if path_match else rest
+            findings.append(_nikto_finding(
+                desc, target,
+                evidence=f"{ref} found at {target}{path}" if path else f"{ref} on {target}",
+                references=[f"https://www.osvdb.org/{ref.replace('OSVDB-', '')}"],
+            ))
 
-                severity = _classify_severity(desc)
-                owasp, phase, mitre = _classify_owasp(desc)
-
-                findings.append({
-                    "title": f"Nikto: {desc[:120]}",
-                    "source": "nikto",
-                    "severity": severity,
-                    "cwe_id": None,
-                    "owasp_category": owasp,
-                    "killchain_phase": phase,
-                    "mitre_technique_id": mitre,
-                    "description": desc,
-                    "evidence": f"{ref} found at {target}{path}" if path else f"{ref} on {target}",
-                    "remediation": _remediation_hint(desc),
-                    "references": [
-                        f"https://www.osvdb.org/{ref.replace('OSVDB-', '')}"
-                        if "OSVDB" in ref else ""
-                    ],
-                })
-
-        elif line.startswith("+ ") and not line.startswith("+ Target") and not line.startswith("+ Start"):
-            # Generic finding line
-            content = line[2:].strip()
-            if len(content) > 20 and not content.startswith("1 host"):
-                severity = _classify_severity(content)
-                owasp, phase, mitre = _classify_owasp(content)
-
-                findings.append({
-                    "title": f"Nikto: {content[:120]}",
-                    "source": "nikto",
-                    "severity": severity,
-                    "cwe_id": None,
-                    "owasp_category": owasp,
-                    "killchain_phase": phase,
-                    "mitre_technique_id": mitre,
-                    "description": content,
-                    "evidence": f"Nikto scan of {target}",
-                    "remediation": _remediation_hint(content),
-                    "references": [],
-                })
+        elif len(content) > _MIN_FINDING_LENGTH:
+            findings.append(_nikto_finding(
+                content, target, evidence=f"Nikto scan of {target}",
+            ))
 
     return findings
+
+
+def _nikto_finding(desc: str, target: str, *, evidence: str,
+                   references: list[str] | None = None) -> dict:
+    owasp, phase, mitre = _classify_owasp(desc)
+    return {
+        "title": f"Nikto: {desc[:120]}",
+        "source": "nikto",
+        "severity": _classify_severity(desc),
+        "cwe_id": None,
+        "owasp_category": owasp,
+        "killchain_phase": phase,
+        "mitre_technique_id": mitre,
+        "description": desc,
+        "evidence": evidence,
+        "remediation": _remediation_hint(desc),
+        "references": references or [],
+    }
 
 
 def _remediation_hint(desc: str) -> str:

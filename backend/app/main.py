@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.config import get_settings
-from app.database import create_tables
+from app.core.migrations import run_migrations
 
 settings = get_settings()
 logger = structlog.get_logger()
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
                    "are unavailable. Set DEMO_MODE=false for real assessments.",
         )
     settings.assert_production_safe()
-    await create_tables()
+    await run_migrations()
     yield
     logger.info("bulwark.shutdown")
     
@@ -78,7 +78,7 @@ async def _unhandled_exception_handler(request: _Request, exc: Exception):
 from app.routers import (
     auth, scans, findings, assets, owasp,
     killchain, osint, compliance, reports,
-    schedules, alerts, billing, webhooks, admin, threatintel,
+    schedules, alerts, billing, webhooks, admin, threatintel, credentials,
 )
 
 app.include_router(auth.router,       prefix="/api/auth",       tags=["Auth"])
@@ -96,6 +96,7 @@ app.include_router(billing.router,    prefix="/api/billing",    tags=["Billing"]
 app.include_router(webhooks.router,   prefix="/api/webhooks",   tags=["Webhooks"])
 app.include_router(admin.router,      prefix="/api/admin",      tags=["Admin"])
 app.include_router(threatintel.router, prefix="/api/threat-intel", tags=["Threat Intel"])
+app.include_router(credentials.router, prefix="/api/credentials", tags=["Scan Credentials"])
 
 
 @app.get("/health", tags=["Health"])

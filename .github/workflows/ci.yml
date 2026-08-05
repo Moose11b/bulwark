@@ -37,7 +37,7 @@ jobs:
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t bulwark-backend:test ./backend
 
-      - name: Create tables and run pytest
+      - name: Migrate and run pytest
         run: |
           # Generated per run rather than hardcoded: a literal whsec_ value in
           # the repo trips GitHub secret scanning even though it is worthless.
@@ -45,12 +45,22 @@ jobs:
           # so any well-formed svix secret round-trips. The route rejects an
           # unset or placeholder secret with a 500, hence the need for one.
           export CLERK_WEBHOOK_SECRET="whsec_$(openssl rand -base64 24)"
+          # Ephemeral key so the credential-encryption tests actually run;
+          # without one they skip, and a fail-closed path would go untested.
+          export CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr '+/' '-_')"
           docker run --rm --network host \
             -e DATABASE_URL -e REDIS_URL \
             -e CELERY_BROKER_URL -e CELERY_RESULT_BACKEND \
-            -e CLERK_WEBHOOK_SECRET \
+            -e CLERK_WEBHOOK_SECRET -e CREDENTIAL_ENCRYPTION_KEY \
             bulwark-backend:test \
-            sh -c "python -c 'import asyncio; from app.database import create_tables; asyncio.run(create_tables())' && pytest"
+            sh -c "alembic upgrade head && pytest"
+
+      - name: Verify migrations match the models (no undeclared drift)
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL -e REDIS_URL \
+            bulwark-backend:test \
+            alembic check
 
   build-and-smoke-test:
     runs-on: ubuntu-latest

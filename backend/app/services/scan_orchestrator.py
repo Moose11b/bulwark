@@ -1,9 +1,11 @@
 """
 Central scan orchestrator.
-Runs scanner modules in sequence, persists findings,
+Runs scanner modules concurrently (bounded), persists findings,
 publishes real-time progress via Redis pub/sub,
 and triggers post-scan enrichment + alerting.
 """
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
 import asyncio
 import json
@@ -53,35 +55,57 @@ def _coerce_severity(value) -> Severity:
         return Severity.INFO
 
 
-async def _run_stage(redis_client, scan_id: str, name: str,
-                     start: int, done: int, timeout: int, factory):
-    """Run one scanner stage in isolation and return its findings.
+@dataclass(frozen=True)
+class _Stage:
+    """One scanner run: a display name, a hard timeout, and a thunk.
 
-    Returns [] instead of propagating when the scanner raises or overruns, so
-    one broken tool degrades a scan rather than destroying it. `timeout` is a
-    backstop above each scanner's own internal limit; note that a scanner
-    running in a thread executor cannot truly be interrupted, so this frees
-    the orchestrator rather than the worker thread.
+    factory receives the progress callback and is deferred, so a stage that is
+    never scheduled never constructs its scanner. Scanners with no sub-progress
+    reporting simply ignore the argument.
     """
-    await _publish(redis_client, scan_id, start, f"{name}...")
-    try:
-        findings = await asyncio.wait_for(factory(), timeout=timeout)
-    except asyncio.TimeoutError:
-        logger.warning("scan.stage_timeout", scan_id=scan_id, stage=name, timeout=timeout)
-        await _publish(redis_client, scan_id, done, f"{name} timed out — continuing")
-        return []
-    except Exception as exc:
-        logger.warning("scan.stage_failed", scan_id=scan_id, stage=name, error=str(exc))
-        await _publish(redis_client, scan_id, done, f"{name} unavailable — continuing")
-        return []
-
-    findings = findings or []
-    await _publish(redis_client, scan_id, done, f"{name} complete — {len(findings)} findings")
-    return findings
+    name: str
+    timeout: int
+    factory: Callable[[Callable], Awaitable[list[dict]]]
 
 
-def _make_progress_cb(loop, redis_client, scan_id: str, base: int, span: float):
-    """Build a progress callback that is safe to call from a worker thread.
+class _ScanProgress:
+    """Progress accounting shared by concurrently running stages.
+
+    Stages used to own fixed percentage bands, which only worked because they
+    ran one at a time. Running in parallel, a scanner's own 0-100 sub-progress
+    cannot drive the overall bar — interleaved scanners would send it jumping
+    backwards. So the percentage advances only as whole stages finish, and a
+    scanner's own progress updates the message text at the current percentage.
+    """
+
+    def __init__(self, redis_client, scan_id: str, start: int, end: int, total: int):
+        self._redis = redis_client
+        self._scan_id = scan_id
+        self._start = start
+        self._end = end
+        self._total = max(1, total)
+        self._completed = 0
+        self._lock = asyncio.Lock()
+
+    @property
+    def pct(self) -> int:
+        span = self._end - self._start
+        return self._start + int(self._completed / self._total * span)
+
+    async def publish(self, message: str) -> None:
+        await _publish(self._redis, self._scan_id, self.pct, message)
+
+    async def stage_finished(self, message: str) -> None:
+        async with self._lock:
+            self._completed += 1
+            await _publish(
+                self._redis, self._scan_id, self.pct,
+                f"{message} ({self._completed}/{self._total})",
+            )
+
+
+def _make_progress_cb(loop, progress: _ScanProgress):
+    """Build a progress callback safe to call from a scanner's worker thread.
 
     Nikto and Nuclei run under `run_in_executor`, so their callbacks fire on a
     ThreadPoolExecutor thread where there is no running loop — `create_task`
@@ -94,18 +118,167 @@ def _make_progress_cb(loop, redis_client, scan_id: str, base: int, span: float):
     """
     def _cb(pct, message):
         try:
-            pct = max(0, min(100, int(pct)))
-            scaled = base + int(pct * span)
             future = asyncio.run_coroutine_threadsafe(
-                _publish(redis_client, scan_id, scaled, str(message)), loop
+                progress.publish(str(message)), loop
             )
             # Bounded wait: guarantees delivery without letting a stalled loop
             # block the scanner thread indefinitely.
             future.result(timeout=5)
         except Exception as exc:
-            logger.debug("progress.publish_failed", scan_id=scan_id, error=str(exc))
+            logger.debug("progress.publish_failed", error=str(exc))
 
     return _cb
+
+
+async def _run_stages(redis_client, scan_id: str, stages: list[_Stage],
+                      start: int, end: int) -> list[dict]:
+    """Run scanner stages concurrently and return their combined findings.
+
+    Stages are independent — different protocols, no shared state — and used to
+    run one after another. Sequentially the worst-case FULL scan totalled about
+    41 minutes against Celery's 30 minute soft limit, so slow scans were killed
+    before they could finish.
+
+    Concurrency is bounded rather than unlimited. Every active scanner points
+    at the same host, and firing Nikto, Nuclei, the 35 parallel exposure
+    probes, and the header check simultaneously is a lot of load to put on
+    someone's server. The cap keeps the wall-clock win (bounded by the single
+    slowest scanner) without turning a scan into a stress test.
+
+    A stage that raises or overruns yields [] and is logged; one broken tool
+    degrades a scan rather than destroying it. Note that a scanner running in a
+    thread executor cannot truly be interrupted, so the timeout frees the
+    orchestrator, not the worker thread.
+    """
+    if not stages:
+        return []
+
+    progress = _ScanProgress(redis_client, scan_id, start, end, len(stages))
+    progress_cb = _make_progress_cb(asyncio.get_running_loop(), progress)
+    semaphore = asyncio.Semaphore(max(1, settings.scan_stage_concurrency))
+
+    await _publish(
+        redis_client, scan_id, start,
+        f"Running {len(stages)} scanner(s): {', '.join(s.name for s in stages)}",
+    )
+
+    async def _run(stage: _Stage) -> list[dict]:
+        async with semaphore:
+            try:
+                findings = await asyncio.wait_for(
+                    stage.factory(progress_cb), timeout=stage.timeout
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "scan.stage_timeout", scan_id=scan_id,
+                    stage=stage.name, timeout=stage.timeout,
+                )
+                await progress.stage_finished(f"{stage.name} timed out — continuing")
+                return []
+            except Exception as exc:
+                logger.warning(
+                    "scan.stage_failed", scan_id=scan_id,
+                    stage=stage.name, error=str(exc),
+                )
+                await progress.stage_finished(f"{stage.name} unavailable — continuing")
+                return []
+
+        findings = findings or []
+        await progress.stage_finished(f"{stage.name} complete — {len(findings)} findings")
+        return findings
+
+    results = await asyncio.gather(*(_run(s) for s in stages))
+    return [f for group in results for f in group]
+
+
+async def _load_credential(db, scan: Scan):
+    """Decrypt the asset's scan credential, if one is configured.
+
+    Held in memory for the duration of the scan only. A decryption failure is
+    surfaced rather than swallowed: scanning unauthenticated while believing
+    otherwise would report a clean result for a surface never reached.
+
+    Only applies to asset-linked scans; an ad-hoc target scan has no place to
+    have stored a credential.
+    """
+    if not scan.asset_id:
+        return None
+
+    from sqlalchemy import select
+    from app.core.pinned_connection import ScanCredential
+    from app.core.secrets import decrypt_secret
+    from app.models import AssetCredential, AuthType
+
+    record = (await db.execute(
+        select(AssetCredential).where(AssetCredential.asset_id == scan.asset_id)
+    )).scalar_one_or_none()
+    if not record:
+        return None
+
+    secret = decrypt_secret(record.secret_encrypted)
+
+    if record.auth_type == AuthType.COOKIE:
+        return ScanCredential("Cookie", secret)
+    if record.auth_type == AuthType.BEARER:
+        return ScanCredential("Authorization", f"Bearer {secret}")
+    return ScanCredential(record.header_name or "Authorization", secret)
+
+
+def _build_stages(scan_type, target, pinned_ip, port, credential=None) -> list[_Stage]:
+    """Select the scanners this scan type runs.
+
+    Timeouts are backstops sitting above each tool's own internal limit, not
+    expected durations.
+    """
+    from app.services.scanners.dns_scanner import DNSScanner
+    from app.services.scanners.exposure_scanner import ExposureScanner
+    from app.services.scanners.header_scanner import HeaderScanner
+    from app.services.scanners.nikto_scanner import NiktoScanner
+    from app.services.scanners.nmap_scanner import NmapScanner
+    from app.services.scanners.nuclei_scanner import NucleiScanner
+    from app.services.scanners.ssl_scanner import SSLScanner
+    from app.services.threat_intel.shodan_scanner import ShodanScanner
+
+    full = scan_type == ScanType.FULL
+    candidates = [
+        (ScanType.NMAP, _Stage(
+            "Port scan", 420,
+            lambda cb: NmapScanner().scan(target, cb),
+        )),
+        (ScanType.SSL, _Stage(
+            "SSL/TLS analysis", 120,
+            lambda cb: SSLScanner().scan(target, cb, pinned_ip=pinned_ip, port=port,
+                                        credential=credential),
+        )),
+        (ScanType.HEADERS, _Stage(
+            "HTTP header audit", 90,
+            lambda cb: HeaderScanner().scan(target, cb, pinned_ip=pinned_ip, port=port,
+                                           credential=credential),
+        )),
+        (ScanType.DNS, _Stage(
+            "DNS reconnaissance", 300,
+            lambda cb: DNSScanner().scan(target, cb),
+        )),
+        (ScanType.NIKTO, _Stage(
+            "Nikto web scan", 480,
+            lambda cb: NiktoScanner().scan(target, cb, pinned_ip=pinned_ip, port=port),
+        )),
+        (ScanType.NUCLEI, _Stage(
+            "Nuclei templates", 780,
+            lambda cb: NucleiScanner().scan(target, cb, pinned_ip=pinned_ip, port=port),
+        )),
+        (ScanType.EXPOSURE, _Stage(
+            "Sensitive file exposure", 180,
+            lambda cb: ExposureScanner().scan(target, cb, pinned_ip=pinned_ip, port=port,
+                                             credential=credential),
+        )),
+        (ScanType.SHODAN, _Stage(
+            "Shodan exposure data", 90,
+            lambda cb: ShodanScanner().scan(target, cb),
+        )),
+    ]
+
+    return [stage for kind, stage in candidates if full or scan_type == kind]
 
 
 async def orchestrate_scan(scan_id: str, celery_task=None):
@@ -171,74 +344,16 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
             # CLI engine has always behaved this way (standalone_engine wraps
             # each scanner); the orchestrator did not, so a single missing
             # binary — nmap in particular — failed the entire GUI scan.
-            loop = asyncio.get_running_loop()
-
-            if scan_type in (ScanType.FULL, ScanType.NMAP):
-                from app.services.scanners.nmap_scanner import NmapScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "Port scan", 10, 22, 420,
-                    lambda: NmapScanner().scan(target, lambda p, m: None),
-                )
-
-            if scan_type in (ScanType.FULL, ScanType.SSL):
-                from app.services.scanners.ssl_scanner import SSLScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "SSL/TLS analysis", 25, 35, 120,
-                    lambda: SSLScanner().scan(target, pinned_ip=pinned_ip, port=port),
-                )
-
-            if scan_type in (ScanType.FULL, ScanType.HEADERS):
-                from app.services.scanners.header_scanner import HeaderScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "HTTP header audit", 38, 46, 90,
-                    lambda: HeaderScanner().scan(target, pinned_ip=pinned_ip, port=port),
-                )
-
-            if scan_type in (ScanType.FULL, ScanType.DNS):
-                from app.services.scanners.dns_scanner import DNSScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "DNS reconnaissance", 48, 56, 300,
-                    lambda: DNSScanner().scan(target),
-                )
-
-            if scan_type in (ScanType.FULL, ScanType.NIKTO):
-                from app.services.scanners.nikto_scanner import NiktoScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "Nikto web scan", 58, 68, 480,
-                    lambda: NiktoScanner().scan(
-                        target,
-                        _make_progress_cb(loop, r, scan_id, 58, 0.10),
-                        pinned_ip=pinned_ip,
-                        port=port,
-                    ),
-                )
-
-            if scan_type in (ScanType.FULL, ScanType.NUCLEI):
-                from app.services.scanners.nuclei_scanner import NucleiScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "Nuclei templates", 70, 82, 780,
-                    lambda: NucleiScanner().scan(
-                        target,
-                        _make_progress_cb(loop, r, scan_id, 70, 0.12),
-                        pinned_ip=pinned_ip,
-                        port=port,
-                    ),
-                )
-
-            if scan_type in (ScanType.FULL, ScanType.EXPOSURE):
-                from app.services.scanners.exposure_scanner import ExposureScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "Sensitive file exposure", 82, 86, 180,
-                    lambda: ExposureScanner().scan(target, pinned_ip=pinned_ip, port=port),
-                )
-
-            # ── Shodan passive exposure intel ────────────────────
-            if scan_type in (ScanType.FULL, ScanType.SHODAN):
-                from app.services.threat_intel.shodan_scanner import ShodanScanner
-                all_findings += await _run_stage(
-                    r, scan_id, "Shodan exposure data", 87, 88, 90,
-                    lambda: ShodanScanner().scan(target),
-                )
+            # Credentials reach only the scanners whose HTTP client we fully
+            # control. Nikto and Nuclei are subprocesses, and passing a secret
+            # on their command line would expose it through /proc to every
+            # local process — so they stay unauthenticated for now rather than
+            # leaking. See docs; this is a deliberate gap, not an oversight.
+            credential = await _load_credential(db, scan)
+            if credential:
+                logger.info("scan.authenticated", scan_id=scan_id)
+            stages = _build_stages(scan_type, target, pinned_ip, port, credential)
+            all_findings += await _run_stages(r, scan_id, stages, start=10, end=88)
 
             # ── Passive OSINT ────────────────────────────────────
             # Produces reference data rather than findings, so it is stored on
@@ -322,9 +437,14 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
                 # IDs come from the persisted rows — the enriched dicts have no
                 # primary key, so the old lookup always produced an empty list
                 # and alerts silently never fired.
+                #
+                # Restricted to newly-appeared findings: re-sending the same
+                # criticals after every scheduled scan is how alerting gets
+                # muted and then ignored. On a first scan everything is new, so
+                # nothing is lost. The full set stays available via the API.
                 critical_ids = [
                     f.id for f in persisted
-                    if f.severity in (Severity.CRITICAL, Severity.HIGH)
+                    if f.is_new and f.severity in (Severity.CRITICAL, Severity.HIGH)
                 ]
                 if critical_ids:
                     send_alert.delay(scan.org_id, scan_id, critical_ids)
@@ -396,22 +516,77 @@ async def _enrich_and_classify(raw_findings: list[dict]) -> list[dict]:
     return enriched
 
 
+async def _previous_finding_index(db, scan: Scan) -> dict[str, datetime]:
+    """Map fingerprint -> first_seen from the most recent prior scan.
+
+    Scoped to the same asset where there is one, falling back to the same
+    target within the org so ad-hoc scans still gain history. Only completed
+    scans count: comparing against a failed or half-finished run would report
+    everything it missed as newly resolved.
+    """
+    from sqlalchemy import select
+
+    prior = select(Scan.id).where(
+        Scan.org_id == scan.org_id,
+        Scan.id != scan.id,
+        Scan.status == ScanStatus.COMPLETED,
+    )
+    prior = prior.where(
+        Scan.asset_id == scan.asset_id if scan.asset_id else Scan.target == scan.target
+    )
+    prior = prior.order_by(Scan.created_at.desc()).limit(1)
+
+    previous_scan_id = (await db.execute(prior)).scalar_one_or_none()
+    if not previous_scan_id:
+        return {}
+
+    rows = await db.execute(
+        select(Finding.fingerprint, Finding.first_seen)
+        .where(Finding.scan_id == previous_scan_id, Finding.fingerprint.isnot(None))
+    )
+    # Keep the earliest first_seen if a fingerprint somehow appears twice.
+    index: dict[str, datetime] = {}
+    for fingerprint, first_seen in rows:
+        existing = index.get(fingerprint)
+        if existing is None or (first_seen and first_seen < existing):
+            index[fingerprint] = first_seen
+    return index
+
+
 async def _persist_findings(db, scan: Scan, findings: list[dict]) -> list[Finding]:
     """Bulk-insert Finding rows, sanitising untrusted scanner output first.
+
+    Each row is reconciled against the previous scan so the platform can say
+    what is new rather than re-reporting the same issues every run.
 
     Returns the persisted rows so callers can reference real primary keys
     (alert dispatch needs them; the raw finding dicts have none).
     """
     from app.core.audit import sanitize_finding
+    from app.services.fingerprint import finding_fingerprint
+
+    previous = await _previous_finding_index(db, scan)
+    seen_at = datetime.utcnow()
+
     rows: list[Finding] = []
     for f in findings:
         # Strip control chars / HTML from scanner-derived text fields
         f = sanitize_finding(f)
         severity = _coerce_severity(f.get("severity"))
 
+        fingerprint = finding_fingerprint(f)
+        previously_seen_at = previous.get(fingerprint)
+
         finding = Finding(
             scan_id=scan.id,
             org_id=scan.org_id,
+            fingerprint=fingerprint,
+            # Absent from the previous scan of this target means genuinely new,
+            # which is the signal worth alerting on.
+            is_new=previously_seen_at is None,
+            # Carried forward so the age of an issue survives re-scanning.
+            first_seen=previously_seen_at or seen_at,
+            last_seen=seen_at,
             title=f.get("title") or f.get("check") or f.get("cve_id") or "Unknown",
             cve_id=f.get("cve_id"),
             cwe_id=f.get("cwe_id"),
