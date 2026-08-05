@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "noreply@bulwark.dev"
 
+    # ── Scanning ────────────────────────────────────────────────
+    # How many scanner stages may run against a target at once. Stages are
+    # independent, so raising this shortens a FULL scan — but every active
+    # scanner points at the same host, so this is also how hard Bulwark hits
+    # someone's server. 4 reaches the practical floor (the slowest single
+    # scanner) without turning a scan into a load test.
+    scan_stage_concurrency: int = 4
+
     # ── Scan limits per plan ────────────────────────────────────
     starter_scan_limit: int = 25
     pro_scan_limit: int = 250
