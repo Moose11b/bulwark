@@ -118,6 +118,19 @@ docker compose up --build
 
 ---
 
+## Authentication
+
+Bulwark authenticates API requests with signed JWTs, verified against a
+**configured** issuer — a token's own issuer claim never decides which keys to
+trust.
+
+- **Clerk** (default): set `CLERK_PUBLISHABLE_KEY`; the trusted issuer is
+  derived from it, or set `CLERK_ISSUER` to override.
+- **Self-hosted OIDC**: set `OIDC_ISSUER` (and `OIDC_CLIENT_ID`) to use your
+  own provider — Keycloak, Authentik, Authelia, or any OIDC-compliant IdP.
+  With `OIDC_AUTO_PROVISION=true`, a user is created on first valid login; the
+  first user into the default organisation becomes its admin.
+
 ## Upgrading
 
 Schema changes are managed by Alembic and applied automatically on startup.

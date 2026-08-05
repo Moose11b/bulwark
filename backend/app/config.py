@@ -38,6 +38,21 @@ class Settings(BaseSettings):
     clerk_secret_key: str = ""
     clerk_publishable_key: str = ""
     clerk_webhook_secret: str = ""
+    # Explicit trusted Clerk issuer (https://<subdomain>.clerk.accounts.dev).
+    # Normally derived from the publishable key; set only to override.
+    clerk_issuer: str = ""
+
+    # ── Generic OIDC (self-hosted auth) ─────────────────────────
+    # An alternative to Clerk for self-hosters running their own IdP
+    # (Keycloak, Authentik, Authelia, ...). Set the issuer to enable it.
+    oidc_issuer: str = ""              # e.g. https://id.example.com/realms/main
+    oidc_client_id: str = ""           # expected `aud` on incoming tokens
+    # Create a user on first valid login rather than requiring pre-provisioning.
+    oidc_auto_provision: bool = False
+    # Org that auto-provisioned users join, by slug. Created if absent.
+    oidc_default_org_slug: str = "default"
+    oidc_default_org_name: str = "Default Organisation"
+    oidc_default_role: str = "analyst"
 
     # ── Stripe ──────────────────────────────────────────────────
     stripe_secret_key: str = ""
@@ -85,6 +100,37 @@ class Settings(BaseSettings):
     @property
     def origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]
+
+    @property
+    def clerk_issuer_url(self) -> str | None:
+        """The one trusted Clerk issuer, or None if Clerk is not configured.
+
+        Prefer the explicit override; otherwise derive it from the publishable
+        key, which encodes the frontend-API host as base64. Deriving it means
+        existing deployments gain issuer pinning with no new required config —
+        and pinning is what closes the forge-any-issuer bypass.
+        """
+        if self.clerk_issuer:
+            return self.clerk_issuer.rstrip("/")
+
+        key = self.clerk_publishable_key.strip()
+        for prefix in ("pk_test_", "pk_live_"):
+            if key.startswith(prefix):
+                import base64
+                encoded = key[len(prefix):]
+                try:
+                    # Tolerate missing base64 padding.
+                    decoded = base64.b64decode(encoded + "=" * (-len(encoded) % 4))
+                    host = decoded.decode("utf-8").rstrip("$").rstrip("/")
+                    if host:
+                        return f"https://{host}"
+                except Exception:
+                    return None
+        return None
+
+    @property
+    def oidc_enabled(self) -> bool:
+        return bool(self.oidc_issuer)
 
     @property
     def is_production(self) -> bool:
