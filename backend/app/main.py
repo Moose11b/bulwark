@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.config import get_settings
-from app.database import create_tables
+from app.core.migrations import run_migrations
 
 settings = get_settings()
 logger = structlog.get_logger()
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
                    "are unavailable. Set DEMO_MODE=false for real assessments.",
         )
     settings.assert_production_safe()
-    await create_tables()
+    await run_migrations()
     yield
     logger.info("bulwark.shutdown")
     
