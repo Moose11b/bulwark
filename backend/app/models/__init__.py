@@ -234,6 +234,16 @@ class Finding(Base):
     assigned_to: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # Cross-scan identity. Stable for the same issue on the same target, so a
+    # finding can be followed from one scan to the next.
+    fingerprint: Mapped[str | None] = mapped_column(String(32), index=True)
+    # False when this fingerprint was already present in the previous scan of
+    # the same asset/target — i.e. the finding is recurring, not newly found.
+    is_new: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # first_seen carries forward from the earliest scan that saw this
+    # fingerprint; last_seen is always the current scan.
     first_seen: Mapped[datetime] = mapped_column(DateTime, default=now)
     last_seen: Mapped[datetime] = mapped_column(DateTime, default=now)
 

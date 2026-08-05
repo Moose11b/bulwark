@@ -215,6 +215,79 @@ async def get_scan_findings(
     ]
 
 
+@router.get("/{scan_id}/delta")
+async def get_scan_delta(
+    scan_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    org: Organisation = Depends(get_current_org),
+):
+    """What changed since the previous completed scan of the same target.
+
+    Resolved findings are derived rather than stored: a past scan genuinely did
+    observe them, so its rows are historical fact and are not rewritten. They
+    are simply the fingerprints present last time and absent now.
+    """
+    scan_result = await db.execute(
+        select(Scan).where(Scan.id == scan_id, Scan.org_id == org.id)
+    )
+    scan = scan_result.scalar_one_or_none()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    current_rows = (await db.execute(
+        select(Finding).where(Finding.scan_id == scan_id)
+    )).scalars().all()
+
+    prior_q = select(Scan.id).where(
+        Scan.org_id == org.id,
+        Scan.id != scan_id,
+        Scan.status == ScanStatus.COMPLETED,
+        Scan.created_at < scan.created_at,
+    )
+    prior_q = prior_q.where(
+        Scan.asset_id == scan.asset_id if scan.asset_id else Scan.target == scan.target
+    )
+    previous_scan_id = (await db.execute(
+        prior_q.order_by(desc(Scan.created_at)).limit(1)
+    )).scalar_one_or_none()
+
+    def _serialise(f: Finding) -> dict:
+        return {
+            "id": f.id, "title": f.title, "severity": f.severity,
+            "source": f.source, "cve_id": f.cve_id,
+            "first_seen": f.first_seen, "last_seen": f.last_seen,
+        }
+
+    new = [_serialise(f) for f in current_rows if f.is_new]
+    recurring = [_serialise(f) for f in current_rows if not f.is_new]
+
+    resolved: list[dict] = []
+    if previous_scan_id:
+        current_fingerprints = {f.fingerprint for f in current_rows}
+        previous_rows = (await db.execute(
+            select(Finding).where(Finding.scan_id == previous_scan_id)
+        )).scalars().all()
+        resolved = [
+            _serialise(f) for f in previous_rows
+            if f.fingerprint and f.fingerprint not in current_fingerprints
+        ]
+
+    return {
+        "scan_id": scan_id,
+        "compared_to": previous_scan_id,
+        "is_first_scan": previous_scan_id is None,
+        "counts": {
+            "new": len(new),
+            "recurring": len(recurring),
+            "resolved": len(resolved),
+        },
+        "new": new,
+        "recurring": recurring,
+        "resolved": resolved,
+    }
+
+
 @router.get("/{scan_id}/stats")
 async def get_scan_stats(
     scan_id: str,

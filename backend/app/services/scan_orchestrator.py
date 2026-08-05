@@ -393,9 +393,14 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
                 # IDs come from the persisted rows — the enriched dicts have no
                 # primary key, so the old lookup always produced an empty list
                 # and alerts silently never fired.
+                #
+                # Restricted to newly-appeared findings: re-sending the same
+                # criticals after every scheduled scan is how alerting gets
+                # muted and then ignored. On a first scan everything is new, so
+                # nothing is lost. The full set stays available via the API.
                 critical_ids = [
                     f.id for f in persisted
-                    if f.severity in (Severity.CRITICAL, Severity.HIGH)
+                    if f.is_new and f.severity in (Severity.CRITICAL, Severity.HIGH)
                 ]
                 if critical_ids:
                     send_alert.delay(scan.org_id, scan_id, critical_ids)
@@ -467,22 +472,77 @@ async def _enrich_and_classify(raw_findings: list[dict]) -> list[dict]:
     return enriched
 
 
+async def _previous_finding_index(db, scan: Scan) -> dict[str, datetime]:
+    """Map fingerprint -> first_seen from the most recent prior scan.
+
+    Scoped to the same asset where there is one, falling back to the same
+    target within the org so ad-hoc scans still gain history. Only completed
+    scans count: comparing against a failed or half-finished run would report
+    everything it missed as newly resolved.
+    """
+    from sqlalchemy import select
+
+    prior = select(Scan.id).where(
+        Scan.org_id == scan.org_id,
+        Scan.id != scan.id,
+        Scan.status == ScanStatus.COMPLETED,
+    )
+    prior = prior.where(
+        Scan.asset_id == scan.asset_id if scan.asset_id else Scan.target == scan.target
+    )
+    prior = prior.order_by(Scan.created_at.desc()).limit(1)
+
+    previous_scan_id = (await db.execute(prior)).scalar_one_or_none()
+    if not previous_scan_id:
+        return {}
+
+    rows = await db.execute(
+        select(Finding.fingerprint, Finding.first_seen)
+        .where(Finding.scan_id == previous_scan_id, Finding.fingerprint.isnot(None))
+    )
+    # Keep the earliest first_seen if a fingerprint somehow appears twice.
+    index: dict[str, datetime] = {}
+    for fingerprint, first_seen in rows:
+        existing = index.get(fingerprint)
+        if existing is None or (first_seen and first_seen < existing):
+            index[fingerprint] = first_seen
+    return index
+
+
 async def _persist_findings(db, scan: Scan, findings: list[dict]) -> list[Finding]:
     """Bulk-insert Finding rows, sanitising untrusted scanner output first.
+
+    Each row is reconciled against the previous scan so the platform can say
+    what is new rather than re-reporting the same issues every run.
 
     Returns the persisted rows so callers can reference real primary keys
     (alert dispatch needs them; the raw finding dicts have none).
     """
     from app.core.audit import sanitize_finding
+    from app.services.fingerprint import finding_fingerprint
+
+    previous = await _previous_finding_index(db, scan)
+    seen_at = datetime.utcnow()
+
     rows: list[Finding] = []
     for f in findings:
         # Strip control chars / HTML from scanner-derived text fields
         f = sanitize_finding(f)
         severity = _coerce_severity(f.get("severity"))
 
+        fingerprint = finding_fingerprint(f)
+        previously_seen_at = previous.get(fingerprint)
+
         finding = Finding(
             scan_id=scan.id,
             org_id=scan.org_id,
+            fingerprint=fingerprint,
+            # Absent from the previous scan of this target means genuinely new,
+            # which is the signal worth alerting on.
+            is_new=previously_seen_at is None,
+            # Carried forward so the age of an issue survives re-scanning.
+            first_seen=previously_seen_at or seen_at,
+            last_seen=seen_at,
             title=f.get("title") or f.get("check") or f.get("cve_id") or "Unknown",
             cve_id=f.get("cve_id"),
             cwe_id=f.get("cwe_id"),
