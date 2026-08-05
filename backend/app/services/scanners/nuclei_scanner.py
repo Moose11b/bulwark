@@ -138,9 +138,17 @@ def _parse_nuclei_jsonl(output: str, target: str) -> list[dict]:
         if cwes:
             cwe_id = cwes[0] if isinstance(cwes, list) else cwes
 
-        cve_id = _extract_cve(template_id, tags) or classification.get("cve-id", [None])[0] if classification.get("cve-id") else None
-        if isinstance(cve_id, list):
-            cve_id = cve_id[0] if cve_id else None
+        # Written out rather than chained: a conditional expression binds
+        # looser than `or`, so the previous one-liner evaluated as
+        #   (extracted or classification_cve) if classification_cve else None
+        # which threw away a CVE found in the template id whenever the
+        # classification block had none — the common case for CVE templates.
+        # The finding was then stored with no CVE and never enriched.
+        classification_cve = classification.get("cve-id")
+        if isinstance(classification_cve, list):
+            classification_cve = classification_cve[0] if classification_cve else None
+
+        cve_id = _extract_cve(template_id, tags) or classification_cve
 
         owasp, phase, mitre = _map_tags(tags)
 
