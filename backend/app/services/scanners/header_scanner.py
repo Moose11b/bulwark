@@ -53,7 +53,7 @@ class HeaderScanner:
     """HTTP security response header analyser."""
 
     async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-                   port: int | None = None) -> list[dict]:
+                   port: int | None = None, credential=None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
         findings = []
 
@@ -66,7 +66,7 @@ class HeaderScanner:
         for scheme in ("https", "http"):
             try:
                 async with pinned_async_client(
-                    hostname, pinned_ip,
+                    hostname, pinned_ip, credential,
                     timeout=15,
                     headers={"User-Agent": "Bulwark-Scanner/2.0"},
                 ) as client:

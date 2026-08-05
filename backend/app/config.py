@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "noreply@bulwark.dev"
 
+    # ── Scan credentials ────────────────────────────────────────
+    # Fernet key (urlsafe base64, 32 bytes) encrypting stored scan
+    # credentials. Unset means authenticated scanning is disabled — the API
+    # refuses to accept credentials rather than storing them in cleartext.
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    credential_encryption_key: str = ""
+
     # ── Scanning ────────────────────────────────────────────────
     # How many scanner stages may run against a target at once. Stages are
     # independent, so raising this shortens a FULL scan — but every active

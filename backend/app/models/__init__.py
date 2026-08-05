@@ -253,6 +253,42 @@ class Finding(Base):
     )
 
 
+class AuthType(str, enum.Enum):
+    """How a scan credential is presented to the target."""
+    COOKIE = "cookie"          # Cookie: <value>
+    BEARER = "bearer"          # Authorization: Bearer <value>
+    HEADER = "header"          # <header_name>: <value>
+
+
+class AssetCredential(Base):
+    """A credential letting scanners reach an asset's authenticated surface.
+
+    Kept in its own table rather than as columns on Asset so that listing or
+    editing assets never loads the ciphertext — the secret is read only by the
+    scan path that actually needs it.
+
+    The secret is encrypted with CREDENTIAL_ENCRYPTION_KEY (see core/secrets.py)
+    and is never returned by the API in any form.
+    """
+    __tablename__ = "asset_credentials"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    asset_id: Mapped[str] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    org_id: Mapped[str] = mapped_column(ForeignKey("organisations.id"), index=True)
+
+    auth_type: Mapped[AuthType] = mapped_column(Enum(AuthType))
+    # Header name for AuthType.HEADER; ignored for cookie/bearer.
+    header_name: Mapped[str | None] = mapped_column(String(64))
+    secret_encrypted: Mapped[str] = mapped_column(Text)
+
+    created_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class FindingComment(Base):
     __tablename__ = "finding_comments"
 

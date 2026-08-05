@@ -45,10 +45,13 @@ jobs:
           # so any well-formed svix secret round-trips. The route rejects an
           # unset or placeholder secret with a 500, hence the need for one.
           export CLERK_WEBHOOK_SECRET="whsec_$(openssl rand -base64 24)"
+          # Ephemeral key so the credential-encryption tests actually run;
+          # without one they skip, and a fail-closed path would go untested.
+          export CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr '+/' '-_')"
           docker run --rm --network host \
             -e DATABASE_URL -e REDIS_URL \
             -e CELERY_BROKER_URL -e CELERY_RESULT_BACKEND \
-            -e CLERK_WEBHOOK_SECRET \
+            -e CLERK_WEBHOOK_SECRET -e CREDENTIAL_ENCRYPTION_KEY \
             bulwark-backend:test \
             sh -c "alembic upgrade head && pytest"
 

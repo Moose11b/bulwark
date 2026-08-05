@@ -14,14 +14,14 @@ class SSLScanner:
     """SSL/TLS certificate and protocol analyser."""
 
     async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-                   port: int | None = None) -> list[dict]:
+                   port: int | None = None, credential=None) -> list[dict]:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None, self._run, target, progress_cb, pinned_ip, port
+            None, self._run, target, progress_cb, pinned_ip, port, credential
         )
 
     def _run(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-             port: int | None = None) -> list[dict]:
+             port: int | None = None, credential=None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
         # TLS lives on 443 unless the target named another port.
         tls_port = port or 443
@@ -156,7 +156,7 @@ class SSLScanner:
 
             async def _fetch_hsts():
                 async with pinned_async_client(
-                    hostname, pinned_ip,
+                    hostname, pinned_ip, credential,
                     timeout=10,
                     headers={"User-Agent": "Bulwark-Scanner/2.0"},
                 ) as client:

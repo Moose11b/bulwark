@@ -60,7 +60,7 @@ class ExposureScanner:
     """Sensitive file and secret exposure checker."""
 
     async def scan(self, target: str, progress_cb=None, pinned_ip: str | None = None,
-                   port: int | None = None) -> list[dict]:
+                   port: int | None = None, credential=None) -> list[dict]:
         hostname = re.sub(r'^https?://', '', target).split('/')[0]
         # A non-443 port almost always means plain HTTP in practice; 443 and
         # unspecified keep TLS. hostname stays bare for pinned-transport matching.
@@ -71,7 +71,7 @@ class ExposureScanner:
         from app.core.pinned_connection import pinned_async_client
 
         async with pinned_async_client(
-            hostname, pinned_ip,
+            hostname, pinned_ip, credential,
             follow_redirects=False,
             timeout=8,
             headers={"User-Agent": "Bulwark-Scanner/2.0"},
@@ -86,7 +86,7 @@ class ExposureScanner:
 
         # Check index page for API key leaks
         try:
-            async with pinned_async_client(hostname, pinned_ip, timeout=10) as client:
+            async with pinned_async_client(hostname, pinned_ip, credential, timeout=10) as client:
                 index_body = await self._read_capped(client, f"{base_url}/")
                 for pattern, key_type in API_KEY_PATTERNS:
                     if index_body and re.search(pattern, index_body):

@@ -191,7 +191,40 @@ async def _run_stages(redis_client, scan_id: str, stages: list[_Stage],
     return [f for group in results for f in group]
 
 
-def _build_stages(scan_type, target, pinned_ip, port) -> list[_Stage]:
+async def _load_credential(db, scan: Scan):
+    """Decrypt the asset's scan credential, if one is configured.
+
+    Held in memory for the duration of the scan only. A decryption failure is
+    surfaced rather than swallowed: scanning unauthenticated while believing
+    otherwise would report a clean result for a surface never reached.
+
+    Only applies to asset-linked scans; an ad-hoc target scan has no place to
+    have stored a credential.
+    """
+    if not scan.asset_id:
+        return None
+
+    from sqlalchemy import select
+    from app.core.pinned_connection import ScanCredential
+    from app.core.secrets import decrypt_secret
+    from app.models import AssetCredential, AuthType
+
+    record = (await db.execute(
+        select(AssetCredential).where(AssetCredential.asset_id == scan.asset_id)
+    )).scalar_one_or_none()
+    if not record:
+        return None
+
+    secret = decrypt_secret(record.secret_encrypted)
+
+    if record.auth_type == AuthType.COOKIE:
+        return ScanCredential("Cookie", secret)
+    if record.auth_type == AuthType.BEARER:
+        return ScanCredential("Authorization", f"Bearer {secret}")
+    return ScanCredential(record.header_name or "Authorization", secret)
+
+
+def _build_stages(scan_type, target, pinned_ip, port, credential=None) -> list[_Stage]:
     """Select the scanners this scan type runs.
 
     Timeouts are backstops sitting above each tool's own internal limit, not
@@ -214,11 +247,13 @@ def _build_stages(scan_type, target, pinned_ip, port) -> list[_Stage]:
         )),
         (ScanType.SSL, _Stage(
             "SSL/TLS analysis", 120,
-            lambda cb: SSLScanner().scan(target, cb, pinned_ip=pinned_ip, port=port),
+            lambda cb: SSLScanner().scan(target, cb, pinned_ip=pinned_ip, port=port,
+                                        credential=credential),
         )),
         (ScanType.HEADERS, _Stage(
             "HTTP header audit", 90,
-            lambda cb: HeaderScanner().scan(target, cb, pinned_ip=pinned_ip, port=port),
+            lambda cb: HeaderScanner().scan(target, cb, pinned_ip=pinned_ip, port=port,
+                                           credential=credential),
         )),
         (ScanType.DNS, _Stage(
             "DNS reconnaissance", 300,
@@ -234,7 +269,8 @@ def _build_stages(scan_type, target, pinned_ip, port) -> list[_Stage]:
         )),
         (ScanType.EXPOSURE, _Stage(
             "Sensitive file exposure", 180,
-            lambda cb: ExposureScanner().scan(target, cb, pinned_ip=pinned_ip, port=port),
+            lambda cb: ExposureScanner().scan(target, cb, pinned_ip=pinned_ip, port=port,
+                                             credential=credential),
         )),
         (ScanType.SHODAN, _Stage(
             "Shodan exposure data", 90,
@@ -308,7 +344,15 @@ async def _orchestrate_scan(r, scan_id: str, celery_task=None):
             # CLI engine has always behaved this way (standalone_engine wraps
             # each scanner); the orchestrator did not, so a single missing
             # binary — nmap in particular — failed the entire GUI scan.
-            stages = _build_stages(scan_type, target, pinned_ip, port)
+            # Credentials reach only the scanners whose HTTP client we fully
+            # control. Nikto and Nuclei are subprocesses, and passing a secret
+            # on their command line would expose it through /proc to every
+            # local process — so they stay unauthenticated for now rather than
+            # leaking. See docs; this is a deliberate gap, not an oversight.
+            credential = await _load_credential(db, scan)
+            if credential:
+                logger.info("scan.authenticated", scan_id=scan_id)
+            stages = _build_stages(scan_type, target, pinned_ip, port, credential)
             all_findings += await _run_stages(r, scan_id, stages, start=10, end=88)
 
             # ── Passive OSINT ────────────────────────────────────
