@@ -14,16 +14,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Nikto from source
-RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
+# Nikto from source, pinned to a release tag for reproducible builds
+RUN git clone --depth 1 --branch 2.6.1 https://github.com/sullo/nikto.git /opt/nikto && \
     ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto && \
     chmod +x /opt/nikto/program/nikto.pl
 
-# Nuclei
+# Nuclei, pinned. The unauthenticated releases/latest API lookup was
+# rate-limited and broke builds intermittently; a pin needs no API call.
+ARG NUCLEI_VERSION=3.9.0
 RUN ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then NA="amd64"; else NA="arm64"; fi && \
-    NUCLEI_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep '"tag_name"' | cut -d'"' -f4) && \
-    wget -q "https://github.com/projectdiscovery/nuclei/releases/download/${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION#v}_linux_${NA}.zip" -O /tmp/nuclei.zip && \
+    wget -q "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${NA}.zip" -O /tmp/nuclei.zip && \
     unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin/ && \
     chmod +x /usr/local/bin/nuclei && \
     rm /tmp/nuclei.zip && \
@@ -32,14 +33,8 @@ RUN ARCH=$(dpkg --print-architecture) && \
 WORKDIR /app
 
 # Only the dependencies the CLI path needs — no DB/web-server packages
-RUN pip install --no-cache-dir \
-    httpx==0.28.0 \
-    dnspython==2.7.0 \
-    python-nmap==0.7.1 \
-    beautifulsoup4==4.12.3 \
-    structlog==24.4.0 \
-    pydantic==2.10.1 \
-    pydantic-settings==2.6.1
+COPY requirements-cli.txt .
+RUN pip install --no-cache-dir -r requirements-cli.txt
 
 # Copy only the app package (engine, scanners, analysis, cli)
 COPY app/ ./app/

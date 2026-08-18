@@ -73,7 +73,12 @@ def _print_table(result: dict):
         badge = _c(f"{sev:>8}", SEV_COLOR.get(sev, "37"))
         title = f.get("title", "Untitled")[:80]
         src = f.get("source", "")
-        print(f"  {badge}  {title}  {_c(f'({src})', '2;37')}")
+        marks = ""
+        if f.get("status") == "new":
+            marks += " " + _c("NEW", "1;33")
+        if f.get("suppressed"):
+            marks += " " + _c("suppressed", "2;37")
+        print(f"  {badge}  {title}{marks}  {_c(f'({src})', '2;37')}")
         extras = []
         if f.get("cve_id"):
             extras.append(f.get("cve_id"))
@@ -93,6 +98,12 @@ def _print_table(result: dict):
         n = summary["by_severity"].get(sev, 0)
         if n:
             parts.append(_c(f"{n} {sev.lower()}", SEV_COLOR.get(sev, "37")))
+    if "new" in summary:
+        parts.append(_c(f"{summary['new']} new", "1;33"))
+        parts.append(f"{summary['recurring']} recurring")
+        parts.append(_c(f"{summary['resolved']} resolved", "32"))
+    if summary.get("suppressed"):
+        parts.append(_c(f"{summary['suppressed']} suppressed", "2;37"))
     print("  " + "  ".join(parts))
 
 
@@ -115,9 +126,38 @@ async def _send_to_backend(result: dict, token: str, api_url: str):
 
 
 async def _run_scan(args) -> int:
-    from app.services.standalone_engine import StandaloneScanEngine, meets_threshold
+    from app.services.standalone_engine import (
+        StandaloneScanEngine, meets_threshold, new_findings_meet_threshold,
+    )
 
-    quiet = args.quiet or args.json == "-" or args.sarif == "-"
+    quiet = args.quiet or args.json == "-" or args.sarif == "-" or args.markdown == "-"
+
+    if args.fail_on_new and not args.baseline:
+        print(_c("  ✗ --fail-on-new requires --baseline", "31"), file=sys.stderr)
+        return 2
+
+    # Load gate inputs up front: a malformed baseline or suppression file
+    # should fail fast (exit 2), not after a multi-minute scan.
+    baseline = None
+    if args.baseline:
+        from app.services.baseline import load_baseline
+        try:
+            baseline = load_baseline(args.baseline)
+        except ValueError as e:
+            print(_c(f"  ✗ {e}", "31"), file=sys.stderr)
+            return 2
+
+    suppression_rules = []
+    suppressions_path = args.suppressions
+    if suppressions_path is None and os.path.exists(".bulwark.yml"):
+        suppressions_path = ".bulwark.yml"
+    if suppressions_path:
+        from app.services.suppressions import load_suppressions, SuppressionError
+        try:
+            suppression_rules = load_suppressions(suppressions_path)
+        except SuppressionError as e:
+            print(_c(f"  ✗ {e}", "31"), file=sys.stderr)
+            return 2
 
     def on_progress(pct, msg):
         if not quiet:
@@ -141,6 +181,19 @@ async def _run_scan(args) -> int:
 
     if not quiet:
         sys.stderr.write("\r" + " " * 70 + "\r")
+
+    # Suppressions first (they decide what the gate can see), then the
+    # baseline diff (a suppressed-but-present finding is not "resolved").
+    if suppression_rules:
+        from app.services.suppressions import apply_suppressions
+        apply_suppressions(result, suppression_rules)
+        if not quiet and result["summary"].get("suppressed"):
+            n = result["summary"]["suppressed"]
+            print(_c(f"  🤫 {n} finding(s) suppressed via {suppressions_path}", "2;37"))
+
+    if baseline is not None:
+        from app.services.baseline import apply_baseline
+        apply_baseline(result, baseline)
 
     # ── Outputs ──────────────────────────────────────────────────
     # JSON
@@ -175,15 +228,37 @@ async def _run_scan(args) -> int:
         await _send_to_backend(result, args.report_to, args.api_url)
 
     # ── Gate decision ────────────────────────────────────────────
-    if meets_threshold(result["summary"], args.fail_on):
+    if args.fail_on_new:
+        gate_failed = new_findings_meet_threshold(result["findings"], args.fail_on)
+        scope = "new findings"
+    else:
+        gate_failed = meets_threshold(result["summary"], args.fail_on)
+        scope = "findings"
+
+    # Markdown summary (after the gate verdict so it can include it)
+    if args.markdown:
+        from app.services.summary_markdown import render_markdown
+        md = render_markdown(
+            result, fail_on=args.fail_on, gate_passed=not gate_failed,
+            fail_on_new=args.fail_on_new,
+        )
+        if args.markdown == "-":
+            print(md)
+        else:
+            with open(args.markdown, "w") as fh:
+                fh.write(md)
+            if not quiet:
+                print(_c(f"  ✓ Markdown summary written to {args.markdown}", "32"))
+
+    if gate_failed:
         if not quiet:
             print()
-            print(_c(f"  ✗ Gate failed: findings at or above '{args.fail_on}' severity.", "1;31"))
+            print(_c(f"  ✗ Gate failed: {scope} at or above '{args.fail_on}' severity.", "1;31"))
         return 1
 
     if not quiet:
         print()
-        print(_c(f"  ✓ Gate passed (threshold: {args.fail_on}).", "1;32"))
+        print(_c(f"  ✓ Gate passed (threshold: {args.fail_on} on {scope}).", "1;32"))
     return 0
 
 
@@ -208,6 +283,19 @@ def main(argv=None):
                       help="Write SARIF output to FILE (use '-' for stdout)")
     scan.add_argument("--json", metavar="FILE",
                       help="Write JSON output to FILE (use '-' for stdout)")
+    scan.add_argument("--baseline", metavar="FILE",
+                      help="Previous scan JSON to diff against: findings are "
+                           "marked new/recurring, and disappeared ones reported "
+                           "as resolved")
+    scan.add_argument("--fail-on-new", action="store_true",
+                      help="Gate only on NEW findings vs --baseline (recurring "
+                           "ones report but never fail the build)")
+    scan.add_argument("--suppressions", metavar="FILE",
+                      help="Suppression file (default: .bulwark.yml in the "
+                           "current directory, if present)")
+    scan.add_argument("--markdown", metavar="FILE",
+                      help="Write a markdown scan summary to FILE (use '-' for "
+                           "stdout) — made for $GITHUB_STEP_SUMMARY")
     scan.add_argument("--no-enrich", action="store_true",
                       help="Skip NVD/EPSS/KEV CVE enrichment (faster, offline)")
     scan.add_argument("--allow-private", action="store_true",

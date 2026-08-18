@@ -19,14 +19,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
+# Nikto, pinned to a release tag. An unpinned clone of master made builds
+# unreproducible and trusted whatever HEAD happened to be that day.
+RUN git clone --depth 1 --branch 2.6.1 https://github.com/sullo/nikto.git /opt/nikto && \
     ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto && \
     chmod +x /opt/nikto/program/nikto.pl
 
+# Nuclei, pinned. The previous unauthenticated releases/latest API lookup was
+# rate-limited (60/hr/IP) and broke builds intermittently with an empty
+# version string; a pin is reproducible and needs no API call.
+ARG NUCLEI_VERSION=3.9.0
 RUN ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then NA="amd64"; else NA="arm64"; fi && \
-    NUCLEI_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep '"tag_name"' | cut -d'"' -f4) && \
-    wget -q "https://github.com/projectdiscovery/nuclei/releases/download/${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION#v}_linux_${NA}.zip" -O /tmp/nuclei.zip && \
+    wget -q "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${NA}.zip" -O /tmp/nuclei.zip && \
     unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin/ && \
     chmod +x /usr/local/bin/nuclei && \
     rm /tmp/nuclei.zip && \
@@ -38,64 +43,11 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-RUN pip install --no-cache-dir \
-    fastapi==0.115.5 \
-    uvicorn[standard]==0.32.1 \
-    python-multipart==0.0.12
-
-RUN pip install --no-cache-dir \
-    sqlalchemy[asyncio]==2.0.36 \
-    asyncpg==0.30.0 \
-    alembic==1.14.0 \
-    greenlet==3.1.1
-
-RUN pip install --no-cache-dir \
-    pydantic==2.10.1 \
-    pydantic-settings==2.6.1 \
-    email-validator==2.2.0
-
-RUN pip install --no-cache-dir \
-    celery==5.4.0 \
-    redis==5.2.0 \
-    celery-redbeat==2.2.0 \
-    flower==2.0.1
-
-RUN pip install --no-cache-dir \
-    python-jose[cryptography]==3.3.0 \
-    passlib[bcrypt]==1.7.4 \
-    svix==1.36.0
-
-RUN pip install --no-cache-dir \
-    httpx==0.28.0 \
-    requests==2.32.3 \
-    beautifulsoup4==4.12.3 \
-    dnspython==2.7.0 \
-    python-nmap==0.7.1
-
-RUN pip install --no-cache-dir \
-    stripe==11.3.0
-
-RUN pip install --no-cache-dir \
-    weasyprint==62.3 \
-    jinja2==3.1.4
-
-RUN pip install --no-cache-dir \
-    slack-sdk==3.33.4 \
-    aiosmtplib==3.0.2
-
-RUN pip install --no-cache-dir \
-    python-dotenv==1.0.1 \
-    structlog==24.4.0 \
-    tenacity==9.0.0 \
-    pytz==2024.2
-
-# Test dependencies. The image installs an explicit package list rather than
-# requirements.txt, so these were previously missing and the documented
-# `docker compose exec backend pytest` could not run at all.
-RUN pip install --no-cache-dir \
-    pytest==8.3.4 \
-    pytest-asyncio==0.24.0 \
-    anyio==4.6.2.post1
+# requirements.txt is the single source of truth for Python dependencies.
+# A hand-maintained list here had already drifted from it (the pydyf pin
+# that keeps WeasyPrint working was missing, and the test dependencies were
+# absent entirely).
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

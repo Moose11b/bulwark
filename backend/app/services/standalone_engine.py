@@ -85,6 +85,13 @@ class StandaloneScanEngine:
             self._progress(92, "Enriching with CVE intelligence...")
             enriched = await self._enrich_cves(enriched)
 
+        # Stamp identity after enrichment so a CVE id, when one was resolved,
+        # anchors the fingerprint. This is what --baseline diffs and
+        # .bulwark.yml suppressions match against.
+        from app.services.fingerprint import finding_fingerprint
+        for f in enriched:
+            f["fingerprint"] = finding_fingerprint(f)
+
         completed = datetime.now(timezone.utc)
         self._progress(100, "Scan complete")
 
@@ -193,3 +200,22 @@ def meets_threshold(summary: dict, fail_on: str) -> bool:
         if rank >= threshold and counts.get(sev, 0) > 0:
             return True
     return False
+
+
+def new_findings_meet_threshold(findings: list[dict], fail_on: str) -> bool:
+    """Gate helper for --fail-on-new: only NEW, unsuppressed findings count.
+
+    Recurring findings are the baseline's problem, already visible there;
+    failing this build for them punishes the wrong change.
+    """
+    if fail_on == "never":
+        return False
+    threshold = SEVERITY_RANK.get(fail_on.upper())
+    if threshold is None:
+        return False
+    return any(
+        not f.get("suppressed")
+        and f.get("status") == "new"
+        and SEVERITY_RANK.get((f.get("severity") or "INFO").upper(), 0) >= threshold
+        for f in findings
+    )

@@ -66,6 +66,9 @@ docker run --rm --network host ghcr.io/moose11b/bulwark-cli:latest \
 | `upload-sarif` | Upload to GitHub Security tab | `true` |
 | `no-enrich` | Skip CVE enrichment (faster, offline) | `false` |
 | `allow-private` | Permit scanning internal/loopback addresses — **trusted local/CI only** | `false` |
+| `baseline-file` | Previous scan JSON to diff against (findings marked new/recurring/resolved) | — |
+| `fail-on-new` | Gate only on **new** findings vs the baseline | `false` |
+| `suppressions-file` | Suppression file path | `.bulwark.yml` |
 
 ### Scan profiles
 
@@ -73,6 +76,77 @@ docker run --rm --network host ghcr.io/moose11b/bulwark-cli:latest \
 - **`web`** — headers + TLS + Nikto + Nuclei (the default; balanced)
 - **`network`** — port scan + TLS posture
 - **`full`** — everything, including DNS and sensitive-file exposure
+
+---
+
+## Diff-aware gating (baselines)
+
+The first scan of a real application finds things — often many. A gate that
+fails on *all* of them forever gets deleted from the pipeline. Diff-aware
+gating answers the question a PR actually asks: **did this change make things
+worse?**
+
+```bash
+# On your default branch: record the baseline
+bulwark scan https://staging.example.com --json baseline.json --fail-on never
+
+# On a PR: fail only if the change introduces NEW findings
+bulwark scan https://staging.example.com \
+  --baseline baseline.json --fail-on-new --fail-on high
+```
+
+Findings are matched across scans by a stable fingerprint (derived from what
+the finding *is* — scanner, CVE, and the thing it names — not scan-specific
+text), reported as `new` / `recurring`, and baseline findings that no longer
+appear are listed as `resolved`. Recurring findings still show up in every
+report; they just don't fail a PR that didn't cause them.
+
+In GitHub Actions, store the baseline as an artifact or commit it, then:
+
+```yaml
+- uses: moose11b/bulwark@v1
+  with:
+    target: http://localhost:3000
+    baseline-file: .bulwark/baseline.json
+    fail-on-new: 'true'
+    fail-on: high
+```
+
+---
+
+## Suppressing findings (`.bulwark.yml`)
+
+Accepted risks and false positives are declared in a reviewable file in your
+repo instead of by loosening the gate. Every entry must say why; entries can
+expire so "temporarily accepted" doesn't quietly become "forever".
+
+```yaml
+# .bulwark.yml — picked up automatically, or pass --suppressions FILE
+suppressions:
+  - fingerprint: 3f2a9c1b8e...        # exact ID, copy it from the JSON output
+    reason: "CSP is set by the CDN in production; staging lacks it"
+
+  - cve: CVE-2024-12345
+    reason: "Not exploitable here: the vulnerable module is feature-flagged off"
+    expires: 2026-12-31               # stops suppressing after this date
+
+  - title: "Missing security header: X-Frame-Options*"   # case-insensitive glob
+    reason: "Legacy admin UI; frame-ancestors is set instead"
+```
+
+Suppressed findings stay visible in all output — marked, never hidden — and
+appear in the Security tab as dismissed alerts with their justification. They
+never fail the gate. A malformed suppression file fails the run (exit 2)
+rather than half-applying.
+
+---
+
+## Markdown summaries
+
+`--markdown FILE` writes a GitHub-flavored summary of the scan — verdict,
+severity counts, new/recurring/resolved breakdown, top findings. The GitHub
+Action writes it to the workflow run's Summary page automatically, so the
+verdict is readable without opening logs or the Security tab.
 
 ---
 
