@@ -10,6 +10,8 @@ Dynamic application security testing (DAST) built to run as a CI/CD pipeline gat
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![SARIF](https://img.shields.io/badge/output-SARIF%202.1.0-blue)]()
 
+![Bulwark scanning a running API from its OpenAPI spec, catching a broken-auth and BOLA flaw and failing the CI gate](docs/demo/demo.gif)
+
 ---
 
 ## 30-second start

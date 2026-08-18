@@ -1,0 +1,72 @@
+# Record the README demo GIF from docs/demo/demo.tape, reproducibly, against
+# the in-repo VulnAPI target (no external images needed). Runs on demand and on
+# release, and commits the refreshed GIF back so the README always shows the
+# current CLI. Triggers only on changes to the tape or this workflow, so the
+# commit-back never loops.
+name: Demo
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+  push:
+    paths:
+      - "docs/demo/demo.tape"
+      - ".github/workflows/demo.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the Bulwark CLI (lean deps) and a `bulwark` shim
+        run: |
+          pip install -r backend/requirements-cli.txt
+          # A clean `bulwark` command for the demo, backed by the source CLI.
+          sudo tee /usr/local/bin/bulwark >/dev/null <<EOF
+          #!/usr/bin/env bash
+          exec env PYTHONPATH="$GITHUB_WORKSPACE/backend" BULWARK_VERSION=demo python -m app.cli "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/bulwark
+          bulwark --version
+
+      - name: Start the VulnAPI target
+        run: |
+          # setsid detaches it from the step's process group so it survives
+          # into the recording step.
+          setsid nohup python3 benchmarks/targets/vulnapi/app.py --host 127.0.0.1 --port 8000 \
+            > vulnapi.log 2>&1 &
+          timeout 20 bash -c 'until curl -sf http://127.0.0.1:8000/health >/dev/null; do sleep 1; done'
+          # Short spec path so the demo command line stays clean.
+          cp benchmarks/targets/vulnapi/openapi.yaml openapi.yaml
+
+      - name: Record the GIF
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: docs/demo/demo.tape
+
+      - name: Upload GIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-gif
+          path: docs/demo/demo.gif
+
+      - name: Commit the refreshed GIF
+        run: |
+          if [ -n "$(git status --porcelain docs/demo/demo.gif)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add docs/demo/demo.gif
+            git commit -m "chore(demo): regenerate demo GIF [skip ci]"
+            git push
+          else
+            echo "Demo GIF unchanged."
+          fi

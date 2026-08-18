@@ -270,7 +270,26 @@ async def _run_scan(args) -> int:
     return 0
 
 
+def _quiet_library_logs():
+    """Silence library INFO/DEBUG logs (scanner internals) for CLI runs.
+
+    The CLI has its own formatted output and a progress line; structlog's
+    default INFO stream (e.g. `header_scanner.complete`) is just noise on top
+    of it. Warnings and errors still surface. Only affects the CLI entrypoint,
+    not the platform, which configures its own logging.
+    """
+    import logging
+    try:
+        import structlog
+        structlog.configure(
+            wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING)
+        )
+    except Exception:
+        pass
+
+
 def main(argv=None):
+    _quiet_library_logs()
     parser = argparse.ArgumentParser(
         prog="bulwark",
         description="Bulwark — standalone vulnerability scanner for CI/CD pipelines.",
