@@ -5,6 +5,7 @@
 Dynamic application security testing (DAST) built to run as a CI/CD pipeline gate. Point it at a running app, get findings mapped to OWASP / MITRE ATT&CK / compliance frameworks, and fail the build when something dangerous ships — with native GitHub Security tab integration via SARIF.
 
 [![CI](https://github.com/moose11b/bulwark/actions/workflows/ci.yml/badge.svg)](https://github.com/moose11b/bulwark/actions/workflows/ci.yml)
+[![Benchmark](https://github.com/moose11b/bulwark/actions/workflows/benchmark.yml/badge.svg)](https://github.com/moose11b/bulwark/actions/workflows/benchmark.yml)
 [![Release](https://img.shields.io/github/v/release/moose11b/bulwark?sort=semver)](https://github.com/moose11b/bulwark/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![SARIF](https://img.shields.io/badge/output-SARIF%202.1.0-blue)]()
@@ -163,6 +164,13 @@ docker compose exec backend alembic upgrade head
 ```
 
 Take a database backup before upgrading, as with any schema change.
+
+## Contributing & security
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+the test workflow, and how to add a scanner. Found a vulnerability **in Bulwark
+itself**? Please report it privately per [SECURITY.md](SECURITY.md), not via a
+public issue.
 
 ## Responsible use
 

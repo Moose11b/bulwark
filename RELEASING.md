@@ -30,6 +30,21 @@ The `release.yml` workflow then automatically:
 - force-moves the `v1` git tag so `uses: moose11b/bulwark@v1` resolves here
 - creates a GitHub Release with auto-generated notes
 
+## Publishing the Action to the GitHub Marketplace
+
+`action.yml` is Marketplace-ready (it has a `name`, `description`, and
+`branding`). To list it — a one-time step, then re-confirmed on each release:
+
+1. Push a release tag (above). GitHub detects the `action.yml` at the repo root.
+2. On the **Release** page for that tag, tick **"Publish this Action to the
+   GitHub Marketplace"**, accept the developer agreement (first time only), and
+   pick a primary + secondary category (e.g. *Security*, *Continuous
+   integration*).
+3. The name must be unique across the Marketplace; if "Bulwark" is taken, adjust
+   the `name:` in `action.yml` before releasing.
+4. Consumers then use `uses: moose11b/bulwark@v1`. The `v1` tag tracks the
+   latest `v1.x`, so they get non-breaking updates automatically.
+
 ## Versioning
 
 Use semver: `vMAJOR.MINOR.PATCH`.
