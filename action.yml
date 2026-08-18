@@ -41,6 +41,10 @@ inputs:
     description: 'Path (in the workspace) to a suppression file'
     required: false
     default: '.bulwark.yml'
+  api-spec:
+    description: 'OpenAPI 3.x / Swagger 2.0 spec to drive API scanning — a path in the workspace or a URL. Enables auth-enforcement, BOLA, and error-handling checks.'
+    required: false
+    default: ''
 
 outputs:
   findings-count:
@@ -73,6 +77,13 @@ runs:
         # auto-discovery can't see the workspace — pass the path explicitly.
         if [ -f "${{ github.workspace }}/${{ inputs.suppressions-file }}" ]; then
           EXTRA_FLAGS="$EXTRA_FLAGS --suppressions /workspace/${{ inputs.suppressions-file }}"
+        fi
+        # An API spec can be a workspace file (mount it) or a URL (pass as-is).
+        if [ -n "${{ inputs.api-spec }}" ]; then
+          case "${{ inputs.api-spec }}" in
+            http://*|https://*) EXTRA_FLAGS="$EXTRA_FLAGS --api-spec ${{ inputs.api-spec }}" ;;
+            *) EXTRA_FLAGS="$EXTRA_FLAGS --api-spec /workspace/${{ inputs.api-spec }}" ;;
+          esac
         fi
 
         # The runner shell is `bash -e`: without the +e guard a gate failure

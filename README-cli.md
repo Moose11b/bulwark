@@ -69,13 +69,53 @@ docker run --rm --network host ghcr.io/moose11b/bulwark-cli:latest \
 | `baseline-file` | Previous scan JSON to diff against (findings marked new/recurring/resolved) | — |
 | `fail-on-new` | Gate only on **new** findings vs the baseline | `false` |
 | `suppressions-file` | Suppression file path | `.bulwark.yml` |
+| `api-spec` | OpenAPI 3.x / Swagger 2.0 spec (workspace path or URL) to drive API scanning | — |
 
 ### Scan profiles
 
 - **`headers`** — security headers, HSTS, CSP, cookies (~10s, great for a fast PR gate)
 - **`web`** — headers + TLS + Nikto + Nuclei (the default; balanced)
 - **`network`** — port scan + TLS posture
-- **`full`** — everything, including DNS and sensitive-file exposure
+- **`api`** — headers + TLS + OpenAPI-driven API checks (see below)
+- **`full`** — everything, including DNS, sensitive-file exposure, and API checks
+
+---
+
+## API scanning (OpenAPI / Swagger)
+
+Modern targets are mostly APIs, and the worst API flaws are authorization ones
+a blind crawler can't reason about — it has no way to know that
+`GET /accounts/{id}` is supposed to require a token. **The spec does.** Bulwark
+reads your OpenAPI 3.x or Swagger 2.0 spec and uses it as an oracle: it checks
+whether the endpoints your spec *declares* as secured are actually enforcing
+that.
+
+```bash
+# Point it at a spec file…
+bulwark scan https://api.example.com --profile api --api-spec openapi.yaml
+
+# …or a URL, or let the 'api'/'full' profile auto-discover it on the target
+bulwark scan https://api.example.com --profile api \
+  --api-spec https://api.example.com/openapi.json
+```
+
+**Checks (all read-only by default):**
+
+| Check | OWASP API | What it flags |
+|-------|-----------|----------------|
+| **Broken authentication** | API2 | A spec-secured endpoint that answers `2xx` to an *unauthenticated* request |
+| **Broken object-level auth (BOLA/IDOR)** | API1 | The same, on an object-id endpoint (`/users/{id}`) returning a body — escalated to critical |
+| **Improper error handling** | API8 | Bounded fuzzing of query params with edge-case values that trigger a `5xx` or leak a stack trace |
+
+**Safety:** only `GET`/`HEAD`/`OPTIONS` are sent unless you pass
+`--api-include-writes` (which can mutate data — disposable environments only).
+Every request is pinned to the validated target IP, and **the spec's declared
+host is ignored** — only its path templates are used — so a malicious spec
+can't redirect the scanner. Endpoint count, concurrency, and body sizes are all
+bounded.
+
+Auto-discovery (no `--api-spec`) probes the usual spec locations —
+`/openapi.json`, `/swagger.json`, `/v3/api-docs`, and similar.
 
 ---
 

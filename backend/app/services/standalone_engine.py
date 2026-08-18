@@ -18,8 +18,9 @@ PROFILES = {
     "headers": ["header_scanner"],
     "web":     ["header_scanner", "ssl_scanner", "nikto", "nuclei"],
     "network": ["nmap", "ssl_scanner"],
+    "api":     ["header_scanner", "ssl_scanner", "api_scanner"],
     "full":    ["nmap", "header_scanner", "ssl_scanner", "dns_scanner",
-                "nikto", "nuclei", "exposure_scanner"],
+                "nikto", "nuclei", "exposure_scanner", "api_scanner"],
 }
 
 SEVERITY_ORDER = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -29,10 +30,14 @@ SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITY_ORDER)}
 class StandaloneScanEngine:
     """Run scanners and classify findings without any external services."""
 
-    def __init__(self, *, enrich: bool = True, on_progress=None, allow_private: bool = False):
+    def __init__(self, *, enrich: bool = True, on_progress=None, allow_private: bool = False,
+                 api_spec: str | None = None, api_include_writes: bool = False):
         self.enrich = enrich
         self._on_progress = on_progress
         self.allow_private = allow_private
+        # API scanning: an explicit spec (file/URL) or None for auto-discovery.
+        self.api_spec = api_spec
+        self.api_include_writes = api_include_writes
 
     def _progress(self, pct: int, msg: str):
         if self._on_progress:
@@ -60,7 +65,11 @@ class StandaloneScanEngine:
         port = validated.port
         pinned_ip = validated.pinned_ip
 
-        scanners = PROFILES.get(profile, PROFILES["web"])
+        scanners = list(PROFILES.get(profile, PROFILES["web"]))
+        # An explicit --api-spec means "scan the API" regardless of profile, so
+        # add the scanner if the chosen profile didn't already include it.
+        if self.api_spec and "api_scanner" not in scanners:
+            scanners.append("api_scanner")
         started = datetime.now(timezone.utc)
         all_findings: list[dict] = []
 
@@ -136,6 +145,13 @@ class StandaloneScanEngine:
         if name == "exposure_scanner":
             from app.services.scanners.exposure_scanner import ExposureScanner
             return await ExposureScanner().scan(target, pinned_ip=pinned_ip, port=port)
+        if name == "api_scanner":
+            from app.services.scanners.api_scanner import OpenAPIScanner
+            return await OpenAPIScanner(
+                spec_source=self.api_spec,
+                allow_private=self.allow_private,
+                include_writes=self.api_include_writes,
+            ).scan(target, pinned_ip=pinned_ip, port=port)
         return []
 
     async def _classify(self, findings: list[dict]) -> list[dict]:

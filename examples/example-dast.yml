@@ -30,3 +30,28 @@ jobs:
           target: http://localhost:3000
           profile: web
           fail-on: high
+
+  # Example: scan a REST API from its OpenAPI spec. Bulwark uses the spec to
+  # check whether endpoints declared as secured actually enforce it (broken
+  # auth, BOLA/IDOR) and fuzzes query parameters for error-handling flaws.
+  bulwark-api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start API
+        run: |
+          docker compose up -d
+          timeout 60 bash -c 'until curl -sf http://localhost:8000/health >/dev/null; do sleep 2; done'
+
+      - name: Bulwark API gate
+        uses: moose11b/bulwark@v1
+        with:
+          target: http://localhost:8000
+          profile: api
+          # A spec committed in the repo, or a URL the running app serves.
+          api-spec: openapi.yaml
+          fail-on: high

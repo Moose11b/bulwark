@@ -168,6 +168,8 @@ async def _run_scan(args) -> int:
         enrich=not args.no_enrich,
         on_progress=on_progress if not quiet else None,
         allow_private=args.allow_private,
+        api_spec=args.api_spec,
+        api_include_writes=args.api_include_writes,
     )
 
     try:
@@ -274,8 +276,17 @@ def main(argv=None):
     scan = sub.add_parser("scan", help="Scan a target")
     scan.add_argument("target", help="URL, domain, or IP to scan")
     scan.add_argument("--profile", default="web",
-                      choices=["headers", "web", "network", "full"],
+                      choices=["headers", "web", "network", "api", "full"],
                       help="Scan profile (default: web)")
+    scan.add_argument("--api-spec", metavar="FILE_OR_URL",
+                      help="OpenAPI 3.x / Swagger 2.0 spec (local file or URL) "
+                           "to drive API endpoint scanning. Enables the API "
+                           "scanner in any profile; without it the 'api'/'full' "
+                           "profiles auto-discover a spec on the target.")
+    scan.add_argument("--api-include-writes", action="store_true",
+                      help="Also probe non-read methods (POST/PUT/PATCH/DELETE) "
+                           "declared in the spec. Off by default — these can "
+                           "mutate data. Use ONLY against disposable environments.")
     scan.add_argument("--fail-on", default="high",
                       choices=["critical", "high", "medium", "low", "never"],
                       help="Fail (exit 1) if findings at/above this severity (default: high)")

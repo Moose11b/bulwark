@@ -39,6 +39,7 @@ docker run --rm --network host ghcr.io/moose11b/bulwark-cli:latest \
 Pipeline security tooling skews two ways: heavyweight SAST/SCA scanners, or DAST products that a security team owns and developers never touch. Bulwark is the missing middle — **dynamic scanning of a running app that a developer drops into a pipeline in three lines.** It's the kind of tool the enterprise platforms (Tenable, Qualys, Rapid7) are repeatedly dinged for *not* being: simple, fast, and free to start.
 
 - **Pipeline-native** — one command, sensible exit codes, SARIF output
+- **API-aware** — point it at an OpenAPI/Swagger spec (`--api-spec`) and it checks whether endpoints declared as secured actually enforce it (BOLA, broken auth, error handling)
 - **Diff-aware** — gate on **new** findings only (`--baseline` + `--fail-on-new`), with reviewable, expiring suppressions in `.bulwark.yml`
 - **Zero infrastructure** — no database, agents, or account for the core scan
 - **Findings with context** — OWASP Top 10, MITRE ATT&CK, Cyber Kill Chain, and four compliance frameworks (PCI-DSS v4.0, ISO 27001:2022, NIST CSF 2.0, CIS Controls v8)
@@ -104,7 +105,8 @@ The split is deliberate: the engine is decoupled from storage so it runs in a 3-
 | `headers` | security headers, HSTS, CSP, cookies | fast PR gate (~10s) |
 | `web` | headers + TLS + Nikto + Nuclei | default, balanced |
 | `network` | port scan + TLS posture | infrastructure checks |
-| `full` | everything + DNS + exposure | scheduled deep scans |
+| `api` | headers + TLS + OpenAPI-driven endpoint checks | REST/JSON APIs |
+| `full` | everything + DNS + exposure + API | scheduled deep scans |
 
 ---
 
