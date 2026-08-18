@@ -94,8 +94,16 @@ class StandaloneScanEngine:
             self._progress(92, "Enriching with CVE intelligence...")
             enriched = await self._enrich_cves(enriched)
 
-        # Stamp identity after enrichment so a CVE id, when one was resolved,
-        # anchors the fingerprint. This is what --baseline diffs and
+        # Reconcile: merge cross-scanner duplicates and calibrate severity from
+        # CVE evidence. Runs after enrichment so CVSS/KEV are available, and
+        # before summarise/fingerprint so counts, the gate, and identity all
+        # reflect the deduplicated set.
+        self._progress(96, "Reconciling findings...")
+        from app.services.reconciliation import reconcile
+        enriched = reconcile(enriched)
+
+        # Stamp identity after reconciliation so a CVE id, when one was
+        # resolved, anchors the fingerprint. This is what --baseline diffs and
         # .bulwark.yml suppressions match against.
         from app.services.fingerprint import finding_fingerprint
         for f in enriched:

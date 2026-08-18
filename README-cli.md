@@ -224,6 +224,28 @@ verdict is readable without opening logs or the Security tab.
 
 ---
 
+## Deduplication & severity calibration
+
+A gate that cries wolf gets muted, so Bulwark reconciles findings before the
+gate sees them:
+
+- **Cross-scanner dedup.** Nuclei, Nikto, and the header scanner overlap. When
+  two scanners report the same issue — a shared CVE, or an identical issue once
+  the tool's name prefix is stripped — they collapse into one finding that lists
+  every tool that agreed (`sources`, shown as `(nikto+nuclei)`). Merging is
+  deliberately conservative: only provably-identical findings merge, because
+  hiding a real finding is worse than showing a duplicate.
+- **Evidence-based severity.** A CVE finding's severity is re-derived from its
+  **CVSS** score rather than trusting each scanner's label — so an over-rated
+  "critical" that is really a CVSS 5.4 becomes `MEDIUM`, and an under-rated one
+  is raised. A finding in **CISA KEV** (known-exploited) is floored at `HIGH`.
+  Findings with no CVE keep Bulwark's own curated severity, and calibration
+  only runs when enrichment is on.
+
+Nothing is rewritten silently: a calibrated finding keeps its
+`severity_original` and a `severity_rationale` in the JSON/SARIF output and the
+table (`severity CRITICAL→MEDIUM (lowered to match CVSS 7.5)`).
+
 ## How findings are classified
 
 Every finding is enriched through the same engine the full Bulwark platform uses:

@@ -78,7 +78,9 @@ def _print_table(result: dict):
             marks += " " + _c("NEW", "1;33")
         if f.get("suppressed"):
             marks += " " + _c("suppressed", "2;37")
-        print(f"  {badge}  {title}{marks}  {_c(f'({src})', '2;37')}")
+        # Corroboration: show the tools that agreed, e.g. (nikto+nuclei).
+        src_label = "+".join(f["sources"]) if f.get("corroborated") else src
+        print(f"  {badge}  {title}{marks}  {_c(f'({src_label})', '2;37')}")
         extras = []
         if f.get("cve_id"):
             extras.append(f.get("cve_id"))
@@ -88,6 +90,10 @@ def _print_table(result: dict):
             extras.append(_c("CISA-KEV", "91"))
         if f.get("owasp_category"):
             extras.append(f"OWASP {f['owasp_category']}")
+        # Calibration is never silent: show the original severity and why.
+        if f.get("severity_original"):
+            extras.append(_c(f"severity {f['severity_original']}→{sev} "
+                             f"({f.get('severity_rationale', '')})", "2;37"))
         if extras:
             print(f"            {_c('  '.join(str(e) for e in extras), '2;37')}")
 
