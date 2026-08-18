@@ -110,6 +110,19 @@ The split is deliberate: the engine is decoupled from storage so it runs in a 3-
 
 ---
 
+## Benchmarks
+
+Bulwark is benchmarked against OWASP ZAP (baseline) on a ground-truth target —
+a deliberately-vulnerable API whose flaws are known in advance — so coverage is
+scored as **detection rate**, not raw finding count. The comparison is produced
+by a [reproducible CI workflow](.github/workflows/benchmark.yml), never typed by
+hand. On the ground-truth API, Bulwark's spec-driven checks catch the
+authorization flaws (BOLA, broken auth) that a black-box baseline structurally
+cannot see. See [`benchmarks/`](benchmarks/) for the method, targets, and how to
+reproduce.
+
+---
+
 ## Running the full platform
 
 ```bash

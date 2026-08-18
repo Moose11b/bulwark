@@ -1,0 +1,68 @@
+# Authoritative list of vulnerabilities planted in VulnAPI.
+#
+# The benchmark scores each scanner by how many of these it detects (and
+# whether it wrongly flags the `controls`), NOT by raw finding count. A finding
+# a scanner reports that matches none of these is neither credited nor punished
+# here — it is listed separately as "additional" output, because without a
+# manual triage we cannot know if it is a true extra or a false positive.
+#
+# `match` rules are intentionally loose (OWASP category OR any keyword in the
+# finding title/name) so a tool is credited for finding the *issue*, regardless
+# of how it words it.
+
+target: vulnapi
+description: Deliberately-vulnerable API with known, black-box-detectable flaws.
+
+# Match keywords name the vulnerability CLASS, never the URL path. A finding
+# merely located at /api/users (e.g. a timestamp disclosure) has not detected
+# the BOLA there — crediting it would inflate the score dishonestly.
+planted:
+  - id: bola-users
+    title: Broken object-level authorization on GET /api/users/{id}
+    endpoint: "GET /api/users/{id}"
+    owasp: A01
+    severity: CRITICAL
+    detectable_by_dast: true
+    match:
+      keywords: ["object-level", "object level", "bola", "idor", "broken object"]
+
+  - id: broken-auth-admin
+    title: Missing authentication on GET /api/admin/config
+    endpoint: "GET /api/admin/config"
+    owasp: A07
+    severity: HIGH
+    detectable_by_dast: true
+    match:
+      keywords: ["authentication not enforced", "missing authentication",
+                 "broken authentication", "unauthenticated access"]
+
+  - id: error-handling-search
+    title: Improper error handling / injection surface on GET /api/search
+    endpoint: "GET /api/search"
+    owasp: A05
+    severity: MEDIUM
+    detectable_by_dast: true
+    match:
+      keywords: ["error handling", "improper error", "error disclosure",
+                 "stack trace", "sql injection", "sql syntax"]
+
+  - id: missing-security-headers
+    title: Missing HTTP security headers on all responses
+    endpoint: "*"
+    owasp: A05
+    severity: MEDIUM
+    detectable_by_dast: true
+    match:
+      keywords: ["security header", "content-security-policy", "csp header",
+                 "x-frame-options", "strict-transport-security",
+                 "x-content-type-options", "header not set", "header missing"]
+
+# Endpoints that are correctly secured. A finding whose endpoint matches one of
+# these (e.g. "auth not enforced on /api/account/{id}") is a FALSE POSITIVE and
+# counts against the tool.
+controls:
+  - id: account-enforced
+    endpoint: "GET /api/account/{id}"
+    note: Returns 401 without a credential; auth is enforced.
+    false_positive_keywords: ["/api/account", "account/{id}"]
+    false_positive_owasp: [A07, A01]
