@@ -175,6 +175,27 @@ async def get_current_user(
     token = credentials.credentials
     token_issuer = _issuer_of(token)
 
+    # Local session token — routed by its fixed issuer, verified with the
+    # server secret. Only honoured when local auth is the active mode, so a
+    # deployment on Clerk/OIDC can't be presented a locally-forged token.
+    from app.core.local_auth import LOCAL_ISSUER
+    if token_issuer == LOCAL_ISSUER:
+        if settings.effective_auth_mode != "local":
+            raise _unauthorised("Local authentication is not enabled")
+        from jose import JWTError as _JWTError
+        from app.core.local_auth import verify_local_token
+        try:
+            claims = verify_local_token(token)
+        except _JWTError as exc:
+            logger.warning("auth.local_invalid", error=str(exc))
+            raise _unauthorised("Invalid or expired token")
+        user = (await db.execute(
+            select(User).where(User.id == claims.get("sub"))
+        )).scalar_one_or_none()
+        if not user or not user.is_active:
+            raise _unauthorised("User not found or inactive")
+        return user
+
     # Route by issuer, but only to issuers this deployment actually trusts.
     # The token cannot select an arbitrary verifier — an unrecognised issuer
     # is rejected rather than fetched from.

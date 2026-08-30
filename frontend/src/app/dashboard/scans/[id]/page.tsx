@@ -5,6 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { isClerk } from '@/lib/authMode'
+import { getStoredToken } from '@/lib/token'
 import { formatRelative, riskColor, severityColor } from '@/lib/utils'
 import {
   Shield, Target, ShieldAlert, CheckSquare,
@@ -79,12 +81,17 @@ export default function ScanDetailPage() {
 
     let cancelled = false
     const connect = async () => {
-      // Fetch a fresh Clerk token to authenticate the socket
+      // Fetch a fresh token to authenticate the socket. Clerk mints one on
+      // demand; local/OIDC mode uses the stored session token.
       let token = ''
       try {
-        const clerk = (window as any).Clerk
-        if (clerk?.session) {
-          token = (await clerk.session.getToken()) ?? ''
+        if (isClerk) {
+          const clerk = (window as any).Clerk
+          if (clerk?.session) {
+            token = (await clerk.session.getToken()) ?? ''
+          }
+        } else {
+          token = getStoredToken() ?? ''
         }
       } catch {
         // no token — socket will be rejected, polling still covers updates

@@ -10,6 +10,32 @@ on:
   pull_request:
 
 jobs:
+  # Type-check and build the dashboard in both auth modes, so a change to the
+  # conditional-auth wiring can't silently break the frontend.
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --legacy-peer-deps
+      - name: Build (local auth mode)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_AUTH_MODE: local
+          NEXT_TELEMETRY_DISABLED: "1"
+      - name: Build (clerk auth mode)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_AUTH_MODE: clerk
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlYW4tdGVzdC0xMjMuY2xlcmsuYWNjb3VudHMuZGV2JA
+          CLERK_SECRET_KEY: sk_test_dummy
+          NEXT_TELEMETRY_DISABLED: "1"
+
   backend-tests:
     runs-on: ubuntu-latest
     services:

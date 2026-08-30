@@ -129,26 +129,42 @@ reproduce.
 ## Running the full platform
 
 ```bash
-cp .env.example .env     # add your Clerk keys (see .env.example)
+cp .env.example .env      # works as-is — no external accounts required
 docker compose up --build
 # dashboard -> http://localhost:3001
 # API docs  -> http://localhost:8000/docs
 ```
 
+On first start it creates an admin and prints a one-time password in the
+backend logs:
+
+```bash
+docker compose logs backend | grep -A1 bootstrap.admin_created
+```
+
+Sign in at http://localhost:3001 with `admin@bulwark.local` and that password;
+you'll be prompted to set your own. That's the whole setup — no Clerk account,
+no third-party service.
+
 ---
 
 ## Authentication
 
-Bulwark authenticates API requests with signed JWTs, verified against a
-**configured** issuer — a token's own issuer claim never decides which keys to
-trust.
+Pick the mode that fits your deployment with `AUTH_MODE` (users are always
+authenticated with signed JWTs verified against a **configured** issuer — a
+token's own issuer claim never decides which keys to trust):
 
-- **Clerk** (default): set `CLERK_PUBLISHABLE_KEY`; the trusted issuer is
-  derived from it, or set `CLERK_ISSUER` to override.
-- **Self-hosted OIDC**: set `OIDC_ISSUER` (and `OIDC_CLIENT_ID`) to use your
-  own provider — Keycloak, Authentik, Authelia, or any OIDC-compliant IdP.
-  With `OIDC_AUTO_PROVISION=true`, a user is created on first valid login; the
-  first user into the default organisation becomes its admin.
+- **`local`** (default): built-in email/password. Zero external dependencies —
+  a first-run admin is created automatically (see above). Best for getting
+  started and for self-hosting.
+- **`oidc`**: your own provider — Keycloak, Authentik, Authelia, or any
+  OIDC-compliant IdP. Set `OIDC_ISSUER` (and `OIDC_CLIENT_ID`); with
+  `OIDC_AUTO_PROVISION=true` a user is created on first valid login, the first
+  into the default organisation becoming its admin. Best for teams with SSO.
+- **`clerk`**: Clerk-hosted auth — set the `CLERK_*` keys. Best for a managed
+  hosted deployment.
+
+Keep `NEXT_PUBLIC_AUTH_MODE` in sync with `AUTH_MODE` so the sign-in UI matches.
 
 ## Upgrading
 

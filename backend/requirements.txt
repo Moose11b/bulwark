@@ -23,6 +23,7 @@ flower==2.0.1
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt>=4.1          # used directly by local auth (passlib 1.7.4 misdetects bcrypt 5.x)
 svix==1.36.0
 
 # HTTP client

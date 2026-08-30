@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserButton } from '@clerk/nextjs'
+import { isClerk } from '@/lib/authMode'
+import { UserMenu } from '@/components/auth/UserMenu'
 
 const NAV = [
   { label: 'Dashboard',    href: '/dashboard',            icon: LayoutDashboard },
@@ -135,7 +137,7 @@ export function Sidebar() {
       {/* User */}
       <div className="p-3" style={{ borderTop: '1px solid #1E3A5F' }}>
         <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
-          <UserButton afterSignOutUrl="/sign-in" />
+          {isClerk ? <UserButton afterSignOutUrl="/sign-in" /> : <UserMenu />}
           <span className="text-xs" style={{ color: '#64748B' }}>Account</span>
         </div>
       </div>

@@ -1,4 +1,6 @@
 import { SignIn } from '@clerk/nextjs'
+import { isClerk } from '@/lib/authMode'
+import { LocalSignIn } from '@/components/auth/LocalSignIn'
 
 export default function SignInPage() {
   return (
@@ -21,7 +23,7 @@ export default function SignInPage() {
           FORTIFY · DETECT · DEFEND
         </p>
       </div>
-      <SignIn />
+      {isClerk ? <SignIn /> : <LocalSignIn />}
     </div>
   )
 }
