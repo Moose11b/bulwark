@@ -1,0 +1,75 @@
+{
+  "@version": "2.15.0",
+  "@generated": "Mon, 18 Aug 2026 17:00:00",
+  "site": [
+    {
+      "@name": "http://127.0.0.1:8801",
+      "@host": "127.0.0.1",
+      "@port": "8801",
+      "alerts": [
+        {
+          "pluginid": "10038",
+          "alertRef": "10038-1",
+          "alert": "Content Security Policy (CSP) Header Not Set",
+          "name": "Content Security Policy (CSP) Header Not Set",
+          "riskcode": "2",
+          "confidence": "3",
+          "riskdesc": "Medium (High)",
+          "cweid": "693",
+          "wascid": "15",
+          "tags": {"OWASP_2021_A05": "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"},
+          "instances": [{"uri": "http://127.0.0.1:8801/", "method": "GET"}]
+        },
+        {
+          "pluginid": "10035",
+          "alertRef": "10035-1",
+          "alert": "Strict-Transport-Security Header Not Set",
+          "name": "Strict-Transport-Security Header Not Set",
+          "riskcode": "1",
+          "confidence": "3",
+          "riskdesc": "Low (High)",
+          "cweid": "319",
+          "wascid": "15",
+          "instances": [{"uri": "http://127.0.0.1:8801/", "method": "GET"}]
+        },
+        {
+          "pluginid": "10021",
+          "alertRef": "10021-1",
+          "alert": "X-Content-Type-Options Header Missing",
+          "name": "X-Content-Type-Options Header Missing",
+          "riskcode": "1",
+          "confidence": "2",
+          "riskdesc": "Low (Medium)",
+          "cweid": "693",
+          "wascid": "15",
+          "instances": [{"uri": "http://127.0.0.1:8801/api/search", "method": "GET"}]
+        },
+        {
+          "pluginid": "90022",
+          "alertRef": "90022-1",
+          "alert": "Application Error Disclosure",
+          "name": "Application Error Disclosure",
+          "riskcode": "2",
+          "confidence": "2",
+          "riskdesc": "Medium (Medium)",
+          "cweid": "209",
+          "wascid": "13",
+          "tags": {"OWASP_2021_A05": "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"},
+          "instances": [{"uri": "http://127.0.0.1:8801/api/search?q=%27", "method": "GET"}]
+        },
+        {
+          "pluginid": "10096",
+          "alertRef": "10096-1",
+          "alert": "Timestamp Disclosure",
+          "name": "Timestamp Disclosure - Unix",
+          "riskcode": "0",
+          "confidence": "1",
+          "riskdesc": "Informational (Low)",
+          "cweid": "200",
+          "wascid": "13",
+          "instances": [{"uri": "http://127.0.0.1:8801/api/users/1", "method": "GET"}]
+        }
+      ]
+    }
+  ]
+}

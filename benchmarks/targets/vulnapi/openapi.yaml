@@ -1,0 +1,68 @@
+openapi: "3.0.0"
+info:
+  title: VulnAPI
+  version: "1.0"
+  description: >-
+    Deliberately-vulnerable benchmark API. Every operation below except /health
+    is declared as requiring authentication; ground_truth.yaml records which
+    ones fail to enforce it.
+
+# Bearer auth is the default for every operation. An endpoint opts out with an
+# explicit `security: []`.
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+paths:
+  /health:
+    get:
+      summary: Liveness probe (public)
+      security: []
+      responses:
+        "200": { description: ok }
+
+  /api/users/{id}:
+    get:
+      summary: Fetch a user by id (should require auth + object ownership)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: user }
+
+  /api/account/{id}:
+    get:
+      summary: Fetch account details (should require auth)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: account }
+        "401": { description: unauthenticated }
+
+  /api/admin/config:
+    get:
+      summary: Read admin configuration (should require auth)
+      responses:
+        "200": { description: config }
+
+  /api/search:
+    get:
+      summary: Search items (public)
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200": { description: results }

@@ -5,9 +5,12 @@
 Dynamic application security testing (DAST) built to run as a CI/CD pipeline gate. Point it at a running app, get findings mapped to OWASP / MITRE ATT&CK / compliance frameworks, and fail the build when something dangerous ships — with native GitHub Security tab integration via SARIF.
 
 [![CI](https://github.com/moose11b/bulwark/actions/workflows/ci.yml/badge.svg)](https://github.com/moose11b/bulwark/actions/workflows/ci.yml)
+[![Benchmark](https://github.com/moose11b/bulwark/actions/workflows/benchmark.yml/badge.svg)](https://github.com/moose11b/bulwark/actions/workflows/benchmark.yml)
 [![Release](https://img.shields.io/github/v/release/moose11b/bulwark?sort=semver)](https://github.com/moose11b/bulwark/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![SARIF](https://img.shields.io/badge/output-SARIF%202.1.0-blue)]()
+
+![Bulwark scanning a running API from its OpenAPI spec, catching a broken-auth and BOLA flaw and failing the CI gate](docs/demo/demo.gif)
 
 ---
 
@@ -39,6 +42,8 @@ docker run --rm --network host ghcr.io/moose11b/bulwark-cli:latest \
 Pipeline security tooling skews two ways: heavyweight SAST/SCA scanners, or DAST products that a security team owns and developers never touch. Bulwark is the missing middle — **dynamic scanning of a running app that a developer drops into a pipeline in three lines.** It's the kind of tool the enterprise platforms (Tenable, Qualys, Rapid7) are repeatedly dinged for *not* being: simple, fast, and free to start.
 
 - **Pipeline-native** — one command, sensible exit codes, SARIF output
+- **API-aware** — point it at an OpenAPI/Swagger spec (`--api-spec`) and it checks whether endpoints declared as secured actually enforce it (BOLA, broken auth, error handling)
+- **Diff-aware** — gate on **new** findings only (`--baseline` + `--fail-on-new`), with reviewable, expiring suppressions in `.bulwark.yml`
 - **Zero infrastructure** — no database, agents, or account for the core scan
 - **Findings with context** — OWASP Top 10, MITRE ATT&CK, Cyber Kill Chain, and four compliance frameworks (PCI-DSS v4.0, ISO 27001:2022, NIST CSF 2.0, CIS Controls v8)
 - **Real CVE intelligence** — CVSS (NVD), exploit probability (EPSS), active-exploitation flags (CISA KEV)
@@ -103,33 +108,63 @@ The split is deliberate: the engine is decoupled from storage so it runs in a 3-
 | `headers` | security headers, HSTS, CSP, cookies | fast PR gate (~10s) |
 | `web` | headers + TLS + Nikto + Nuclei | default, balanced |
 | `network` | port scan + TLS posture | infrastructure checks |
-| `full` | everything + DNS + exposure | scheduled deep scans |
+| `api` | headers + TLS + OpenAPI-driven endpoint checks | REST/JSON APIs |
+| `full` | everything + DNS + exposure + API | scheduled deep scans |
+
+---
+
+## Benchmarks
+
+Bulwark is benchmarked against OWASP ZAP (baseline) on a ground-truth target —
+a deliberately-vulnerable API whose flaws are known in advance — so coverage is
+scored as **detection rate**, not raw finding count. The comparison is produced
+by a [reproducible CI workflow](.github/workflows/benchmark.yml), never typed by
+hand. On the ground-truth API, Bulwark's spec-driven checks catch the
+authorization flaws (BOLA, broken auth) that a black-box baseline structurally
+cannot see. See [`benchmarks/`](benchmarks/) for the method, targets, and how to
+reproduce.
 
 ---
 
 ## Running the full platform
 
 ```bash
-cp .env.example .env     # add your Clerk keys (see .env.example)
+cp .env.example .env      # works as-is — no external accounts required
 docker compose up --build
 # dashboard -> http://localhost:3001
 # API docs  -> http://localhost:8000/docs
 ```
 
+On first start it creates an admin and prints a one-time password in the
+backend logs:
+
+```bash
+docker compose logs backend | grep -A1 bootstrap.admin_created
+```
+
+Sign in at http://localhost:3001 with `admin@bulwark.local` and that password;
+you'll be prompted to set your own. That's the whole setup — no Clerk account,
+no third-party service.
+
 ---
 
 ## Authentication
 
-Bulwark authenticates API requests with signed JWTs, verified against a
-**configured** issuer — a token's own issuer claim never decides which keys to
-trust.
+Pick the mode that fits your deployment with `AUTH_MODE` (users are always
+authenticated with signed JWTs verified against a **configured** issuer — a
+token's own issuer claim never decides which keys to trust):
 
-- **Clerk** (default): set `CLERK_PUBLISHABLE_KEY`; the trusted issuer is
-  derived from it, or set `CLERK_ISSUER` to override.
-- **Self-hosted OIDC**: set `OIDC_ISSUER` (and `OIDC_CLIENT_ID`) to use your
-  own provider — Keycloak, Authentik, Authelia, or any OIDC-compliant IdP.
-  With `OIDC_AUTO_PROVISION=true`, a user is created on first valid login; the
-  first user into the default organisation becomes its admin.
+- **`local`** (default): built-in email/password. Zero external dependencies —
+  a first-run admin is created automatically (see above). Best for getting
+  started and for self-hosting.
+- **`oidc`**: your own provider — Keycloak, Authentik, Authelia, or any
+  OIDC-compliant IdP. Set `OIDC_ISSUER` (and `OIDC_CLIENT_ID`); with
+  `OIDC_AUTO_PROVISION=true` a user is created on first valid login, the first
+  into the default organisation becoming its admin. Best for teams with SSO.
+- **`clerk`**: Clerk-hosted auth — set the `CLERK_*` keys. Best for a managed
+  hosted deployment.
+
+Keep `NEXT_PUBLIC_AUTH_MODE` in sync with `AUTH_MODE` so the sign-in UI matches.
 
 ## Upgrading
 
@@ -147,6 +182,13 @@ docker compose exec backend alembic upgrade head
 ```
 
 Take a database backup before upgrading, as with any schema change.
+
+## Contributing & security
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+the test workflow, and how to add a scanner. Found a vulnerability **in Bulwark
+itself**? Please report it privately per [SECURITY.md](SECURITY.md), not via a
+public issue.
 
 ## Responsible use
 

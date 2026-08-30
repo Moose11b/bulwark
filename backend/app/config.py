@@ -24,6 +24,26 @@ class Settings(BaseSettings):
     # with it off, Bulwark only ever reports what it actually observed.
     demo_mode: bool = False
 
+    # ── Authentication mode ─────────────────────────────────────
+    # How the platform authenticates dashboard/API users:
+    #   local  — built-in email/password (self-contained; the default for a
+    #            fresh self-hosted install, so `docker compose up` just works)
+    #   oidc   — your own OIDC provider (Keycloak, Authentik, Authelia, ...)
+    #   clerk  — Clerk-hosted auth (best for a managed/hosted deployment)
+    #   auto   — infer: oidc if OIDC_ISSUER set, else clerk if Clerk keys set,
+    #            else local. Keeps existing deployments working unchanged.
+    auth_mode: str = "auto"
+
+    # First-run local admin. On first startup in local mode with an empty user
+    # table, an admin is created. If no password is set here, a strong random
+    # one is generated and logged once; either way the first login must change
+    # it. Never leave a real password in a committed .env.
+    bootstrap_admin_email: str = "admin@bulwark.local"
+    bootstrap_admin_password: str = ""
+
+    # Lifetime of a local-auth session token.
+    local_session_ttl_hours: int = 12
+
     # ── Database ────────────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://bulwark:changeme@localhost:5432/bulwark"
 
@@ -133,6 +153,23 @@ class Settings(BaseSettings):
         return bool(self.oidc_issuer)
 
     @property
+    def effective_auth_mode(self) -> str:
+        """Resolve 'auto' to a concrete mode; otherwise return the explicit one.
+
+        Inference preserves the behaviour of existing deployments: a config
+        that set OIDC or Clerk keys keeps using them. A brand-new install with
+        neither falls through to local, so it works out of the box.
+        """
+        mode = (self.auth_mode or "auto").lower()
+        if mode != "auto":
+            return mode
+        if self.oidc_issuer:
+            return "oidc"
+        if self.clerk_secret_key or self.clerk_publishable_key:
+            return "clerk"
+        return "local"
+
+    @property
     def is_production(self) -> bool:
         return self.environment == "production"
 
@@ -145,12 +182,18 @@ class Settings(BaseSettings):
             problems.append("DEBUG must be false in production")
         if "change" in self.secret_key.lower() or len(self.secret_key) < 32:
             problems.append("SECRET_KEY must be a strong unique value (>=32 chars)")
-        for name, val in [
-            ("CLERK_SECRET_KEY", self.clerk_secret_key),
-            ("STRIPE_SECRET_KEY", self.stripe_secret_key),
-        ]:
-            if not val or "changeme" in val.lower():
-                problems.append(f"{name} is not configured")
+        # Only require a provider's secret when that provider is the active
+        # auth mode — a local-auth deployment needs neither Clerk nor Stripe.
+        mode = self.effective_auth_mode
+        if mode == "clerk" and (
+            not self.clerk_secret_key or "changeme" in self.clerk_secret_key.lower()
+        ):
+            problems.append("CLERK_SECRET_KEY is not configured")
+        if mode == "local" and self.bootstrap_admin_password and (
+            "changeme" in self.bootstrap_admin_password.lower()
+            or len(self.bootstrap_admin_password) < 10
+        ):
+            problems.append("BOOTSTRAP_ADMIN_PASSWORD is weak (>=10 chars, not a placeholder)")
         if "changeme" in self.database_url.lower():
             problems.append("Database password is still the default 'changeme'")
         if "changeme" in self.redis_url.lower():

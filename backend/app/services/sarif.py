@@ -76,7 +76,7 @@ def to_sarif(result: dict, *, version: str = "2.0.0") -> str:
         if f.get("evidence"):
             message += f"\n\nEvidence: {f['evidence']}"
 
-        sarif_results.append({
+        entry = {
             "ruleId": rule_id,
             "level": level,
             "message": {"text": message[:2000]},
@@ -89,13 +89,34 @@ def to_sarif(result: dict, *, version: str = "2.0.0") -> str:
             "properties": {
                 "severity": severity,
                 "source": f.get("source"),
+                "sources": f.get("sources", [f.get("source")] if f.get("source") else []),
+                "corroborated": f.get("corroborated", False),
                 "cve_id": f.get("cve_id"),
                 "cvss_score": f.get("cvss_score"),
                 "epss_score": f.get("epss_score"),
                 "in_kev": f.get("is_in_kev", False),
                 "killchain_phase": f.get("killchain_phase"),
+                # Present only when reconciliation changed the severity, so the
+                # calibration is auditable rather than silent.
+                "severity_original": f.get("severity_original"),
+                "severity_rationale": f.get("severity_rationale"),
             },
-        })
+        }
+        # Bulwark's own stable identity, so GitHub deduplicates alerts across
+        # scans by what the finding IS rather than by message text.
+        if f.get("fingerprint"):
+            entry["partialFingerprints"] = {"bulwarkFingerprint/v1": f["fingerprint"]}
+        # Baseline diff status (--baseline runs only)
+        if f.get("status"):
+            entry["properties"]["baseline_status"] = f["status"]
+        # A .bulwark.yml suppression renders as a dismissed alert, not an
+        # open one — visible with its justification, never gate-failing.
+        if f.get("suppressed"):
+            entry["suppressions"] = [{
+                "kind": "external",
+                "justification": f.get("suppressed_reason", ""),
+            }]
+        sarif_results.append(entry)
 
     sarif = {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",

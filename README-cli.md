@@ -66,13 +66,127 @@ docker run --rm --network host ghcr.io/moose11b/bulwark-cli:latest \
 | `upload-sarif` | Upload to GitHub Security tab | `true` |
 | `no-enrich` | Skip CVE enrichment (faster, offline) | `false` |
 | `allow-private` | Permit scanning internal/loopback addresses — **trusted local/CI only** | `false` |
+| `baseline-file` | Previous scan JSON to diff against (findings marked new/recurring/resolved) | — |
+| `fail-on-new` | Gate only on **new** findings vs the baseline | `false` |
+| `suppressions-file` | Suppression file path | `.bulwark.yml` |
+| `api-spec` | OpenAPI 3.x / Swagger 2.0 spec (workspace path or URL) to drive API scanning | — |
 
 ### Scan profiles
 
 - **`headers`** — security headers, HSTS, CSP, cookies (~10s, great for a fast PR gate)
 - **`web`** — headers + TLS + Nikto + Nuclei (the default; balanced)
 - **`network`** — port scan + TLS posture
-- **`full`** — everything, including DNS and sensitive-file exposure
+- **`api`** — headers + TLS + OpenAPI-driven API checks (see below)
+- **`full`** — everything, including DNS, sensitive-file exposure, and API checks
+
+---
+
+## API scanning (OpenAPI / Swagger)
+
+Modern targets are mostly APIs, and the worst API flaws are authorization ones
+a blind crawler can't reason about — it has no way to know that
+`GET /accounts/{id}` is supposed to require a token. **The spec does.** Bulwark
+reads your OpenAPI 3.x or Swagger 2.0 spec and uses it as an oracle: it checks
+whether the endpoints your spec *declares* as secured are actually enforcing
+that.
+
+```bash
+# Point it at a spec file…
+bulwark scan https://api.example.com --profile api --api-spec openapi.yaml
+
+# …or a URL, or let the 'api'/'full' profile auto-discover it on the target
+bulwark scan https://api.example.com --profile api \
+  --api-spec https://api.example.com/openapi.json
+```
+
+**Checks (all read-only by default):**
+
+| Check | OWASP API | What it flags |
+|-------|-----------|----------------|
+| **Broken authentication** | API2 | A spec-secured endpoint that answers `2xx` to an *unauthenticated* request |
+| **Broken object-level auth (BOLA/IDOR)** | API1 | The same, on an object-id endpoint (`/users/{id}`) returning a body — escalated to critical |
+| **Improper error handling** | API8 | Bounded fuzzing of query params with edge-case values that trigger a `5xx` or leak a stack trace |
+
+**Safety:** only `GET`/`HEAD`/`OPTIONS` are sent unless you pass
+`--api-include-writes` (which can mutate data — disposable environments only).
+Every request is pinned to the validated target IP, and **the spec's declared
+host is ignored** — only its path templates are used — so a malicious spec
+can't redirect the scanner. Endpoint count, concurrency, and body sizes are all
+bounded.
+
+Auto-discovery (no `--api-spec`) probes the usual spec locations —
+`/openapi.json`, `/swagger.json`, `/v3/api-docs`, and similar.
+
+---
+
+## Diff-aware gating (baselines)
+
+The first scan of a real application finds things — often many. A gate that
+fails on *all* of them forever gets deleted from the pipeline. Diff-aware
+gating answers the question a PR actually asks: **did this change make things
+worse?**
+
+```bash
+# On your default branch: record the baseline
+bulwark scan https://staging.example.com --json baseline.json --fail-on never
+
+# On a PR: fail only if the change introduces NEW findings
+bulwark scan https://staging.example.com \
+  --baseline baseline.json --fail-on-new --fail-on high
+```
+
+Findings are matched across scans by a stable fingerprint (derived from what
+the finding *is* — scanner, CVE, and the thing it names — not scan-specific
+text), reported as `new` / `recurring`, and baseline findings that no longer
+appear are listed as `resolved`. Recurring findings still show up in every
+report; they just don't fail a PR that didn't cause them.
+
+In GitHub Actions, store the baseline as an artifact or commit it, then:
+
+```yaml
+- uses: moose11b/bulwark@v1
+  with:
+    target: http://localhost:3000
+    baseline-file: .bulwark/baseline.json
+    fail-on-new: 'true'
+    fail-on: high
+```
+
+---
+
+## Suppressing findings (`.bulwark.yml`)
+
+Accepted risks and false positives are declared in a reviewable file in your
+repo instead of by loosening the gate. Every entry must say why; entries can
+expire so "temporarily accepted" doesn't quietly become "forever".
+
+```yaml
+# .bulwark.yml — picked up automatically, or pass --suppressions FILE
+suppressions:
+  - fingerprint: 3f2a9c1b8e...        # exact ID, copy it from the JSON output
+    reason: "CSP is set by the CDN in production; staging lacks it"
+
+  - cve: CVE-2024-12345
+    reason: "Not exploitable here: the vulnerable module is feature-flagged off"
+    expires: 2026-12-31               # stops suppressing after this date
+
+  - title: "Missing security header: X-Frame-Options*"   # case-insensitive glob
+    reason: "Legacy admin UI; frame-ancestors is set instead"
+```
+
+Suppressed findings stay visible in all output — marked, never hidden — and
+appear in the Security tab as dismissed alerts with their justification. They
+never fail the gate. A malformed suppression file fails the run (exit 2)
+rather than half-applying.
+
+---
+
+## Markdown summaries
+
+`--markdown FILE` writes a GitHub-flavored summary of the scan — verdict,
+severity counts, new/recurring/resolved breakdown, top findings. The GitHub
+Action writes it to the workflow run's Summary page automatically, so the
+verdict is readable without opening logs or the Security tab.
 
 ---
 
@@ -109,6 +223,28 @@ docker run --rm --network host ghcr.io/moose11b/bulwark-cli:latest \
 ```
 
 ---
+
+## Deduplication & severity calibration
+
+A gate that cries wolf gets muted, so Bulwark reconciles findings before the
+gate sees them:
+
+- **Cross-scanner dedup.** Nuclei, Nikto, and the header scanner overlap. When
+  two scanners report the same issue — a shared CVE, or an identical issue once
+  the tool's name prefix is stripped — they collapse into one finding that lists
+  every tool that agreed (`sources`, shown as `(nikto+nuclei)`). Merging is
+  deliberately conservative: only provably-identical findings merge, because
+  hiding a real finding is worse than showing a duplicate.
+- **Evidence-based severity.** A CVE finding's severity is re-derived from its
+  **CVSS** score rather than trusting each scanner's label — so an over-rated
+  "critical" that is really a CVSS 5.4 becomes `MEDIUM`, and an under-rated one
+  is raised. A finding in **CISA KEV** (known-exploited) is floored at `HIGH`.
+  Findings with no CVE keep Bulwark's own curated severity, and calibration
+  only runs when enrichment is on.
+
+Nothing is rewritten silently: a calibrated finding keeps its
+`severity_original` and a `severity_rationale` in the JSON/SARIF output and the
+table (`severity CRITICAL→MEDIUM (lowered to match CVSS 7.5)`).
 
 ## How findings are classified
 

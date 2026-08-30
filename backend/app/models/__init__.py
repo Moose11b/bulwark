@@ -119,6 +119,10 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(50), default="analyst")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Local-auth credentials. Null for Clerk/OIDC users, whose identity lives
+    # with the external provider; set only for built-in email/password users.
+    password_hash: Mapped[str | None] = mapped_column(String)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 

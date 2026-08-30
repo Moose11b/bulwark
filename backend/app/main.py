@@ -21,6 +21,11 @@ async def lifespan(app: FastAPI):
         )
     settings.assert_production_safe()
     await run_migrations()
+    # First-run local admin (no-op unless local auth mode with an empty user
+    # table). Runs after migrations so the users table and its new columns
+    # exist.
+    from app.core.bootstrap import ensure_bootstrap_admin
+    await ensure_bootstrap_admin()
     yield
     logger.info("bulwark.shutdown")
     
