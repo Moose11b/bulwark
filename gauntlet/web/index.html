@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gauntlet — Facilitator Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="mark"><span>G</span></span>
+      <b>Gauntlet</b><small>Facilitator Console</small>
+    </div>
+    <div class="bar-mid" id="sessionMeta" hidden>
+      <span class="pill" id="statusPill">setup</span>
+      <span class="clock" id="clock">T+00:00</span>
+      <span class="sess-name" id="sessName"></span>
+    </div>
+    <div class="bar-actions">
+      <button class="btn ghost" id="btnPause" hidden>Pause</button>
+      <button class="btn ghost" id="btnResume" hidden>Resume</button>
+      <button class="btn ghost" id="btnVerify" hidden title="Verify the timeline hash-chain">Verify chain</button>
+      <button class="btn" id="btnNew">New exercise</button>
+      <button class="btn toggle" id="btnTheme" aria-label="Toggle theme">◑</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- Empty / setup state -->
+    <section class="empty" id="emptyState">
+      <div class="empty-card">
+        <p class="eyebrow">Ready to run</p>
+        <h1>Start a facilitated exercise.</h1>
+        <p class="sub" id="emptySub">Loading scenarios…</p>
+        <div class="setup" id="setupForm" hidden>
+          <label>Scenario
+            <select id="scenarioSel"></select>
+          </label>
+          <label>Session name
+            <input id="sessInput" type="text" placeholder="Q3 ransomware drill">
+          </label>
+          <button class="btn primary" id="btnStart">Brief &amp; begin</button>
+        </div>
+        <ul class="sess-list" id="sessList"></ul>
+      </div>
+    </section>
+
+    <!-- Running console -->
+    <div class="console" id="console" hidden>
+      <!-- left rail -->
+      <aside class="rail">
+        <div class="panel">
+          <p class="eyebrow">Scenario</p>
+          <h2 id="scnName"></h2>
+          <p class="muted" id="scnActor"></p>
+          <div class="roe" id="scnRoe"></div>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">Objectives</p>
+          <ul class="obj" id="objList"></ul>
+        </div>
+        <div class="panel">
+          <p class="eyebrow">Environment</p>
+          <div class="env" id="envSummary"></div>
+        </div>
+      </aside>
+
+      <!-- center: the scene -->
+      <section class="stage">
+        <div class="panel scene" id="scenePanel">
+          <div class="scene-head">
+            <span class="chan" id="injChannel">briefing</span>
+            <span class="code" id="injCode">INJ-00</span>
+            <span class="gc" id="injClock">T+00:00</span>
+          </div>
+          <h2 id="injTitle">—</h2>
+          <p class="narrative" id="injNarrative"></p>
+          <div class="scene-meta">
+            <div>
+              <span class="lbl">Expected actions</span>
+              <ul id="injActions"></ul>
+            </div>
+            <div>
+              <span class="lbl">Maps to</span>
+              <div class="tags" id="injMaps"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="branchPanel">
+          <p class="eyebrow">Choose the next move <span class="hint">— you are the dungeon master</span></p>
+          <div class="branches" id="branches"></div>
+          <div class="override">
+            <input id="overrideGoto" type="text" placeholder="…or jump to an inject code (proctor override)">
+            <button class="btn ghost" id="btnOverride">Override →</button>
+          </div>
+        </div>
+
+        <div class="terminal-note" id="terminalNote" hidden>
+          <p class="eyebrow">Arc complete</p>
+          <p>This branch has resolved. Capture final observations, then generate reports below or complete the session.</p>
+          <button class="btn" id="btnComplete">Complete exercise</button>
+        </div>
+      </section>
+
+      <!-- right: adjudication, observation, timeline, reports -->
+      <aside class="side">
+        <div class="panel">
+          <p class="eyebrow">Adjudicate an action</p>
+          <p class="hint">Rule a move against the environment's defenses.</p>
+          <input id="adjTech" type="text" placeholder="Techniques e.g. T1003.001, T1021">
+          <input id="adjAsset" type="text" placeholder="Target asset e.g. FIN-APP-02">
+          <button class="btn" id="btnAdjudicate">Rule on it</button>
+          <div class="ruling" id="rulingOut" hidden></div>
+        </div>
+
+        <div class="panel">
+          <p class="eyebrow">Capture observation</p>
+          <select id="obsObj"></select>
+          <div class="ratings" id="obsRatings">
+            <button data-r="met" class="rating">Met</button>
+            <button data-r="partial" class="rating">Partial</button>
+            <button data-r="missed" class="rating">Missed</button>
+            <button data-r="note" class="rating active">Note</button>
+          </div>
+          <textarea id="obsNote" rows="2" placeholder="What the evaluator saw…"></textarea>
+          <button class="btn" id="btnObserve">Log observation</button>
+        </div>
+
+        <div class="panel">
+          <p class="eyebrow">Reports</p>
+          <div class="report-btns">
+            <button class="btn ghost" data-aud="executive">Executive</button>
+            <button class="btn ghost" data-aud="technical">Technical</button>
+            <button class="btn ghost" data-aud="grc">GRC</button>
+            <button class="btn ghost" data-aud="training">Training</button>
+          </div>
+        </div>
+
+        <div class="panel timeline-panel">
+          <p class="eyebrow">Timeline <span class="hint" id="chainState"></span></p>
+          <ol class="timeline" id="timeline"></ol>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <button class="modal-x" id="modalX">✕</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
