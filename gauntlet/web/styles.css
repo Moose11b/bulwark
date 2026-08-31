@@ -184,4 +184,19 @@ input,select,textarea{font:inherit;color:inherit}
 /* ---- toast ---- */
 .toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:var(--surface-3);border:1px solid var(--line);border-radius:9px;padding:.6rem 1rem;font-size:.82rem;box-shadow:var(--shadow);z-index:60}
 
+/* ---- generator block (empty state) ---- */
+.gen{margin-top:1.5rem;padding-top:1.3rem;border-top:1px dashed var(--line)}
+.btn.small{padding:.28rem .6rem;font-size:.74rem}
+.scene-foot{margin-top:.9rem;display:flex;justify-content:flex-end}
+
+/* ---- delivery preview (modal) ---- */
+.delivery{border-left:3px solid var(--accent);padding-left:1rem}
+.delivery .chan{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;background:var(--accent-wash);color:var(--accent-ink);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:5px;padding:.14rem .5rem;margin-bottom:.5rem}
+.delivery h1{font-size:1.25rem;margin:.2rem 0 .8rem}
+.dfields{width:100%;margin:0 0 1rem;border-collapse:collapse}
+.dfields td{border-bottom:1px solid var(--line-soft);padding:.35rem .5rem;font-size:.85rem;vertical-align:top}
+.dfields td.dk{color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:.72rem;width:34%;white-space:nowrap}
+.delivery .dbody{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:.85rem 1rem;font-size:.92rem;color:var(--ink-soft)}
+.delivery h2{font-size:.9rem;margin:1rem 0 .3rem}
+
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}

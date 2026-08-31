@@ -45,6 +45,23 @@
           </label>
           <button class="btn primary" id="btnStart">Brief &amp; begin</button>
         </div>
+
+        <div class="gen" id="genBlock" hidden>
+          <p class="eyebrow">Generate a scenario <span class="hint">— threat-actor driven, grounded in an environment</span></p>
+          <div class="setup">
+            <label>Environment
+              <select id="genEnv"></select>
+            </label>
+            <label>Threat actor or template
+              <select id="genActor"></select>
+            </label>
+            <label>Name <span class="hint">(optional)</span>
+              <input id="genName" type="text" placeholder="Generated exercise">
+            </label>
+            <button class="btn" id="btnGenerate">Generate &amp; add to scenarios</button>
+          </div>
+        </div>
+
         <ul class="sess-list" id="sessList"></ul>
       </div>
     </section>
@@ -88,6 +105,9 @@
               <span class="lbl">Maps to</span>
               <div class="tags" id="injMaps"></div>
             </div>
+          </div>
+          <div class="scene-foot">
+            <button class="btn ghost small" id="btnDelivery">Preview delivery ▸</button>
           </div>
         </div>
 

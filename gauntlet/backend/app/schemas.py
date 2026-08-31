@@ -215,3 +215,71 @@ class ReportOut(BaseModel):
     title: str
     content: str
     created_at: datetime
+
+
+# --------------------------------------------------------------------------- #
+# Authoring (M2): catalog, generation, delivery, editing
+# --------------------------------------------------------------------------- #
+class ActorOut(BaseModel):
+    key: str
+    name: str
+    label: str
+    description: str
+    kill_chain: list[str]
+    objective_count: int
+
+
+class TemplateOut(BaseModel):
+    key: str
+    name: str
+    actor: str
+    narrative: str
+
+
+class InjectBankEntryOut(BaseModel):
+    key: str
+    phase: str
+    channel: str
+    techniques: list[str]
+    title: str
+
+
+class GenerateRequest(BaseModel):
+    environment_id: int
+    actor_key: Optional[str] = None
+    template_key: Optional[str] = None
+    name: Optional[str] = None
+
+
+class DeliveryOut(BaseModel):
+    channel: str
+    headline: str
+    fields: dict
+    body: str
+    expected_actions: list[str] = Field(default_factory=list)
+    techniques: list[str] = Field(default_factory=list)
+
+
+class InjectUpdate(BaseModel):
+    title: Optional[str] = None
+    channel: Optional[str] = None
+    clock: Optional[str] = None
+    narrative: Optional[str] = None
+    visible_to: Optional[list] = None
+    expected_actions: Optional[list] = None
+    attack_techniques: Optional[list] = None
+    target_asset: Optional[str] = None
+    objective_code: Optional[str] = None
+    branches: Optional[list] = None
+    sequence: Optional[int] = None
+    is_start: Optional[bool] = None
+
+
+class ScenarioUpdate(BaseModel):
+    name: Optional[str] = None
+    threat_actor: Optional[str] = None
+    narrative: Optional[str] = None
+    scope: Optional[str] = None
+    rules_of_engagement: Optional[str] = None
+    cells: Optional[list] = None
+    exercise_type: Optional[str] = None

@@ -96,12 +96,34 @@ gauntlet/
 
 ## Roadmap
 
-| Phase | Scope |
-|---|---|
-| **M1 — Tabletop core** *(this build)* | Intake, scenario + MSEL, console, adjudication, timeline, reports |
-| M2 — Authoring & library | Template library, threat-actor-driven generation, inject bank, multi-channel delivery |
-| M3 — Multi-cell & parallel | Fog-of-war per cell, evaluator companion, parallel/functional modes |
-| M4 — Sandbox & real-time | Cyber-range hooks, live technical injects, program-level coverage analytics |
+| Phase | Scope | Status |
+|---|---|---|
+| **M1 — Tabletop core** | Intake, scenario + MSEL, console, adjudication, timeline, reports | Shipped |
+| **M2 — Authoring & library** | Template library, threat-actor-driven generation, inject bank, multi-channel delivery | Shipped |
+| M3 — Multi-cell & parallel | Fog-of-war per cell, evaluator companion, parallel/functional modes | Next |
+| M4 — Sandbox & real-time | Cyber-range hooks, live technical injects, program-level coverage analytics | Planned |
+
+### Authoring (M2)
+
+Generate a grounded, branching scenario instead of starting from a blank MSEL:
+
+```bash
+# List the catalog
+curl localhost:8000/api/catalog/actors
+curl localhost:8000/api/catalog/templates
+
+# Generate a scenario bound to an environment, then it's immediately runnable
+curl -X POST localhost:8000/api/scenarios/generate \
+  -H 'content-type: application/json' \
+  -d '{"environment_id":1,"template_key":"ransomware_finance","name":"Q3 drill"}'
+```
+
+The generator walks a threat actor's kill-chain, picks real target assets from
+the environment for each phase, and wires valid branches to good/bad
+resolutions. Refine the draft with `PATCH /api/scenarios/{id}` and
+`PATCH /api/injects/{id}`, and preview any inject in its channel with
+`GET /api/injects/{id}/delivery`. The facilitator console exposes generation
+(empty-state) and delivery preview (on the scene).
 
 ## Responsible use
 

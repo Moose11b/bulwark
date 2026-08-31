@@ -144,10 +144,10 @@ its own.
 
 ## Roadmap
 
-- **M1 — Tabletop core** *(this build)*: intake, scenario + MSEL, console,
+- **M1 — Tabletop core** *(shipped)*: intake, scenario + MSEL, console,
   adjudication, timeline, reports.
-- **M2 — Authoring & library**: template library, threat-actor-driven generation,
-  inject bank, multi-channel delivery.
+- **M2 — Authoring & library** *(shipped)*: template library, threat-actor-driven
+  generation, inject bank, multi-channel delivery.
 - **M3 — Multi-cell & parallel**: fog-of-war per cell, evaluator companion,
   parallel/functional modes.
 - **M4 — Sandbox & real-time**: cyber-range hooks, live technical injects,

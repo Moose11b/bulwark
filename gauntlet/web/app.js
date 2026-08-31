@@ -4,6 +4,7 @@
 
   const $ = (id) => document.getElementById(id);
   let currentSid = null;
+  let currentInjectId = null;
   let selectedRating = "note";
   let objectives = [];
 
@@ -82,6 +83,46 @@
       li.appendChild(btn);
       list.appendChild(li);
     });
+
+    await populateGenerator();
+  }
+
+  async function populateGenerator() {
+    try {
+      const [envs, actors, templates] = await Promise.all([
+        api("/api/environments"),
+        api("/api/catalog/actors"),
+        api("/api/catalog/templates"),
+      ]);
+      if (!envs.length) return;
+      $("genBlock").hidden = false;
+
+      $("genEnv").innerHTML = envs
+        .map((e) => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
+
+      const tOpts = templates.map((t) =>
+        `<option value="tpl:${t.key}">Template · ${escapeHtml(t.name)}</option>`).join("");
+      const aOpts = actors.map((a) =>
+        `<option value="act:${a.key}">Actor · ${escapeHtml(a.name)} (${a.kill_chain.length} phases)</option>`).join("");
+      $("genActor").innerHTML = tOpts + aOpts;
+    } catch (e) { /* generator is optional */ }
+  }
+
+  async function generateScenario() {
+    const envId = Number($("genEnv").value);
+    const pick = $("genActor").value;
+    const name = $("genName").value.trim() || null;
+    const body = { environment_id: envId, name };
+    if (pick.startsWith("tpl:")) body.template_key = pick.slice(4);
+    else body.actor_key = pick.slice(4);
+    try {
+      const scn = await api("/api/scenarios/generate", "POST", body);
+      toast(`Generated "${scn.name}" — ${scn.injects.length} injects.`);
+      await loadHome();
+      // Preselect the freshly generated scenario for launch.
+      $("scenarioSel").value = String(scn.id);
+      $("sessInput").focus();
+    } catch (e) { toast("Generate failed: " + e.message); }
   }
 
   async function startNew() {
@@ -126,6 +167,7 @@
 
     // scene
     if (current_inject) {
+      currentInjectId = current_inject.id;
       $("scenePanel").hidden = false;
       $("injChannel").textContent = current_inject.channel;
       $("injCode").textContent = current_inject.code;
@@ -293,6 +335,31 @@
     } catch (e) { toast(e.message); }
   }
 
+  async function previewDelivery() {
+    if (!currentInjectId) return;
+    try {
+      const d = await api(`/api/injects/${currentInjectId}/delivery`);
+      $("modalBody").innerHTML = renderDelivery(d);
+      $("modal").hidden = false;
+    } catch (e) { toast(e.message); }
+  }
+
+  function renderDelivery(d) {
+    const rows = Object.entries(d.fields || {})
+      .map(([k, v]) => `<tr><td class="dk">${escapeHtml(k)}</td><td>${escapeHtml(String(v))}</td></tr>`).join("");
+    const actions = (d.expected_actions || [])
+      .map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+    return (
+      `<div class="delivery ch-${escapeHtml(d.channel)}">` +
+      `<span class="chan">${escapeHtml(d.channel.replace("_", " "))}</span>` +
+      `<h1>${escapeHtml(d.headline)}</h1>` +
+      `<table class="dfields"><tbody>${rows}</tbody></table>` +
+      `<p class="dbody">${escapeHtml(d.body)}</p>` +
+      (actions ? `<h2>Expected actions</h2><ul>${actions}</ul>` : "") +
+      `</div>`
+    );
+  }
+
   // ---- helpers ----------------------------------------------------------- //
   function describeEvent(e) {
     const p = e.payload || {};
@@ -359,6 +426,8 @@
     initTheme();
     $("btnNew").addEventListener("click", loadHome);
     $("btnStart").addEventListener("click", startNew);
+    $("btnGenerate").addEventListener("click", generateScenario);
+    $("btnDelivery").addEventListener("click", previewDelivery);
     $("btnAdjudicate").addEventListener("click", adjudicate);
     $("btnObserve").addEventListener("click", observe);
     $("btnOverride").addEventListener("click", () => {
