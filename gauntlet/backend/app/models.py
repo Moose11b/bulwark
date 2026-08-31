@@ -130,7 +130,13 @@ class Session(Base):
     name: Mapped[str] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(20), default="setup")  # setup|running|paused|complete
     clock_mode: Mapped[str] = mapped_column(String(20), default="compressed")
+    mode: Mapped[str] = mapped_column(String(20), default="tabletop")  # tabletop|sandbox|real_time
     current_inject_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    # Authorization for live/technical injects (M4). Empty until explicitly granted.
+    auth_scope: Mapped[list] = mapped_column(JSON, default=list)  # allowed target codes/hosts, "*" = any
+    authorized_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    auth_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

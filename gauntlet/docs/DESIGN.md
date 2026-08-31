@@ -150,5 +150,14 @@ its own.
   generation, inject bank, multi-channel delivery.
 - **M3 — Multi-cell & parallel** *(shipped)*: fog-of-war per cell, evaluator
   companion, parallel/functional roll-up.
-- **M4 — Sandbox & real-time**: cyber-range hooks, live technical injects,
-  program coverage analytics.
+- **M4 — Sandbox & real-time** *(shipped)*: authorization-gated live/technical
+  injects through a pluggable range adapter (safe simulation adapter by
+  default), program-level coverage analytics.
+
+## Guardrails realised in M4
+
+Operational modes never touch anything out of bounds: a live inject is refused
+unless its session carries a valid, unexpired authorization grant (`scope`,
+`authorized_by`, expiry) whose scope covers the target. The shipped range
+adapter is a **simulation** that contacts no external system; a real adapter is
+pluggable behind the same authorization gate.

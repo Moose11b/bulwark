@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gauntlet — Parallel Roll-up</title>
+  <title>Gauntlet — Program Coverage</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -13,26 +13,25 @@
   <header class="bar">
     <div class="brand">
       <span class="mark"><span>G</span></span>
-      <b>Gauntlet</b><small>Parallel Roll-up</small>
+      <b>Gauntlet</b><small>Program Coverage</small>
     </div>
     <div class="bar-actions">
       <a class="btn ghost" href="/">Console</a>
-      <a class="btn ghost" href="/evaluator.html">Evaluator</a>
-      <a class="btn ghost" href="/program.html">Program</a>
+      <a class="btn ghost" href="/rollup.html">Roll-up</a>
       <button class="btn toggle" id="btnTheme" aria-label="Toggle theme">◑</button>
     </div>
   </header>
 
   <div class="subbar">
-    <label>Scenario <select id="scenarioSel"></select></label>
-    <button class="btn ghost" id="btnRefresh">Refresh</button>
+    <span class="hint">Coverage and improvement tracking across every scenario and run in the program.</span>
+    <button class="btn ghost" id="btnRefresh" style="margin-left:auto">Refresh</button>
   </div>
 
   <main class="rollup" id="app">
-    <div class="panel"><p class="eyebrow">Pick a scenario to compare its runs.</p></div>
+    <div class="panel"><p class="eyebrow">Loading program analytics…</p></div>
   </main>
 
   <div class="toast" id="toast" hidden></div>
-  <script src="/rollup.js"></script>
+  <script src="/program.js"></script>
 </body>
 </html>

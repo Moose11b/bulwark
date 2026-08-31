@@ -8,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import authoring, environments, multicell, reports, scenarios, sessions
+from .api import (
+    authoring, environments, live, multicell, program, reports, scenarios, sessions,
+)
 from .config import APP_TAGLINE, APP_TITLE, SEED_ON_START, WEB_DIR
 from .database import SessionLocal, create_all
 
@@ -53,6 +55,8 @@ app.include_router(sessions.router)
 app.include_router(reports.router)
 app.include_router(authoring.router)
 app.include_router(multicell.router)
+app.include_router(live.router)
+app.include_router(program.router)
 
 # Facilitator console (served last so it never shadows the API routes).
 if WEB_DIR.exists():

@@ -128,6 +128,7 @@ class SessionCreate(BaseModel):
     scenario_id: int
     name: str
     clock_mode: str = "compressed"
+    mode: str = "tabletop"  # tabletop | sandbox | real_time
 
 
 class SessionSummary(BaseModel):
@@ -136,6 +137,7 @@ class SessionSummary(BaseModel):
     scenario_id: int
     name: str
     status: str
+    mode: str = "tabletop"
     current_inject_code: Optional[str] = None
     created_at: datetime
 
@@ -333,3 +335,27 @@ class RollupOut(BaseModel):
     sessions: list[SessionRollupRow] = Field(default_factory=list)
     technique_coverage: list[TechniqueCoverage] = Field(default_factory=list)
     totals: RollupTotals
+
+
+# --------------------------------------------------------------------------- #
+# Sandbox & real-time (M4)
+# --------------------------------------------------------------------------- #
+class AuthorizeIn(BaseModel):
+    scope: list[str] = Field(default_factory=list)  # allowed targets; "*" = any
+    authorized_by: str
+    note: str = ""
+    ttl_minutes: int = 120
+
+
+class LiveInjectIn(BaseModel):
+    technique: str
+    target: str
+    action: str = ""
+
+
+class LiveInjectOut(BaseModel):
+    executed: bool
+    adapter: str
+    telemetry: list = Field(default_factory=list)
+    ruling: dict
+    event: TimelineEventOut

@@ -96,7 +96,8 @@ def create_session(payload: schemas.SessionCreate, db: Session = Depends(get_db)
     if not db.get(models.Scenario, payload.scenario_id):
         raise HTTPException(400, "scenario_id does not exist")
     s = models.Session(
-        scenario_id=payload.scenario_id, name=payload.name, clock_mode=payload.clock_mode
+        scenario_id=payload.scenario_id, name=payload.name,
+        clock_mode=payload.clock_mode, mode=payload.mode,
     )
     db.add(s)
     db.commit()

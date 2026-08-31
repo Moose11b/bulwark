@@ -101,7 +101,35 @@ gauntlet/
 | **M1 — Tabletop core** | Intake, scenario + MSEL, console, adjudication, timeline, reports | Shipped |
 | **M2 — Authoring & library** | Template library, threat-actor-driven generation, inject bank, multi-channel delivery | Shipped |
 | **M3 — Multi-cell & parallel** | Fog-of-war per cell, evaluator companion, parallel/functional roll-up | Shipped |
-| M4 — Sandbox & real-time | Cyber-range hooks, live technical injects, program-level coverage analytics | Next |
+| **M4 — Sandbox & real-time** | Authorization-gated live/technical injects (pluggable range adapter), program-level coverage analytics | Shipped |
+
+### Sandbox, real-time & program analytics (M4)
+
+Operational modes execute technical injects through a **pluggable range
+adapter** — the shipped default is a **simulation** adapter that contacts
+nothing and derives synthetic telemetry from the environment model. A live
+inject is **refused unless the session carries a valid, unexpired authorization
+grant whose scope covers the target** — the guardrail that keeps operational
+modes in bounds.
+
+```bash
+# Create a sandbox session, authorize a scope, then run a live inject
+SID=$(curl -s -X POST localhost:8000/api/sessions -H 'content-type: application/json' \
+  -d '{"scenario_id":1,"name":"range run","mode":"sandbox"}' | python -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+curl -X POST localhost:8000/api/sessions/$SID/authorize -H 'content-type: application/json' \
+  -d '{"scope":["FIN-APP-02"],"authorized_by":"CISO","ttl_minutes":60}'
+curl -X POST localhost:8000/api/sessions/$SID/live-inject -H 'content-type: application/json' \
+  -d '{"technique":"T1003.001","target":"FIN-APP-02"}'   # refused for out-of-scope targets
+
+# Program-level analytics across every scenario and run
+curl localhost:8000/api/program/coverage
+curl localhost:8000/api/program/improvements
+```
+
+The **program coverage** page (`/program.html`) shows ATT&CK coverage by tactic,
+a per-technique table (exercised / detected / never-tested), and improvement
+items that mark themselves *improved* when a later run meets a previously missed
+objective.
 
 ### Multi-cell & parallel (M3)
 
