@@ -283,3 +283,53 @@ class ScenarioUpdate(BaseModel):
     rules_of_engagement: Optional[str] = None
     cells: Optional[list] = None
     exercise_type: Optional[str] = None
+
+
+# --------------------------------------------------------------------------- #
+# Multi-cell & parallel (M3)
+# --------------------------------------------------------------------------- #
+class CellSessionView(BaseModel):
+    """A fog-of-war view of a running session for one cell."""
+    cell_key: str
+    cell_name: str
+    can_see_all: bool
+    session: SessionSummary
+    current_inject: Optional[InjectOut] = None
+    timeline: list[TimelineEventOut] = Field(default_factory=list)
+    objectives: list[ObjectiveOut] = Field(default_factory=list)
+
+
+class SessionRollupRow(BaseModel):
+    id: int
+    name: str
+    status: str
+    injects: int
+    adjudications: int
+    detected: int
+    missed: int
+    mttd: Optional[float] = None
+    coverage_gaps: list[str] = Field(default_factory=list)
+    objectives_met: int
+
+
+class TechniqueCoverage(BaseModel):
+    technique: str
+    injects: int
+    sessions_detected: int
+    sessions_total: int
+
+
+class RollupTotals(BaseModel):
+    sessions: int
+    adjudications: int
+    detected: int
+    detection_rate: Optional[float] = None
+    mean_mttd: Optional[float] = None
+
+
+class RollupOut(BaseModel):
+    scenario_id: int
+    scenario_name: str
+    sessions: list[SessionRollupRow] = Field(default_factory=list)
+    technique_coverage: list[TechniqueCoverage] = Field(default_factory=list)
+    totals: RollupTotals
