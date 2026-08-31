@@ -148,7 +148,7 @@ its own.
   adjudication, timeline, reports.
 - **M2 — Authoring & library** *(shipped)*: template library, threat-actor-driven
   generation, inject bank, multi-channel delivery.
-- **M3 — Multi-cell & parallel**: fog-of-war per cell, evaluator companion,
-  parallel/functional modes.
+- **M3 — Multi-cell & parallel** *(shipped)*: fog-of-war per cell, evaluator
+  companion, parallel/functional roll-up.
 - **M4 — Sandbox & real-time**: cyber-range hooks, live technical injects,
   program coverage analytics.

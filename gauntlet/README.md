@@ -100,8 +100,27 @@ gauntlet/
 |---|---|---|
 | **M1 — Tabletop core** | Intake, scenario + MSEL, console, adjudication, timeline, reports | Shipped |
 | **M2 — Authoring & library** | Template library, threat-actor-driven generation, inject bank, multi-channel delivery | Shipped |
-| M3 — Multi-cell & parallel | Fog-of-war per cell, evaluator companion, parallel/functional modes | Next |
-| M4 — Sandbox & real-time | Cyber-range hooks, live technical injects, program-level coverage analytics | Planned |
+| **M3 — Multi-cell & parallel** | Fog-of-war per cell, evaluator companion, parallel/functional roll-up | Shipped |
+| M4 — Sandbox & real-time | Cyber-range hooks, live technical injects, program-level coverage analytics | Next |
+
+### Multi-cell & parallel (M3)
+
+```bash
+# What one cell is allowed to see (fog of war) during a running session
+curl localhost:8000/api/sessions/1/cell/blue_cell
+
+# A per-cell redacted environment (white/grey/black box)
+curl "localhost:8000/api/environments/1/view/blue_cell?scenario_id=1"
+
+# Compare every run of a scenario (parallel / program view)
+curl localhost:8000/api/scenarios/1/rollup
+```
+
+The console links two more surfaces: the **evaluator companion**
+(`/evaluator.html`) — objectives with their evaluation guides, quick
+observation logging, and the fog-of-war view of what a chosen cell can see —
+and the **parallel roll-up** (`/rollup.html`) — per-run metrics and an ATT&CK
+coverage heatmap across every run of a scenario.
 
 ### Authoring (M2)
 
