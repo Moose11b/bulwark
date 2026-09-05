@@ -4,18 +4,21 @@
 
 Siege Tower turns a structured Rules of Engagement (ROE) into a small set of
 ranked, [MITRE ATT&CK](https://attack.mitre.org/)-mapped attack plans. Each plan
-is broad at the top — an ordered kill chain — and drills down into concrete
-commands, expected results, a success indicator, and a fallback technique for
-every step. The reasoning behind each plan is written out, so the output is an
-auditable engagement artifact, not a black box.
+is broad at the top — an ordered kill chain — and drills down into the objective
+of each step, the **tools an operator would typically use**, expected results, a
+success indicator, and a fallback technique. The reasoning behind each plan is
+written out, so the output is an auditable engagement artifact, not a black box.
 
 It is a **standalone program** (library + CLI) with a **zero-dependency core**
 (standard library only), designed to also drop into the
 [Bulwark](../README.md) platform as a library.
 
-> **Authorized use only.** Siege Tower plans offensive security engagements. Use
-> it strictly within a signed scope and Rules of Engagement. The commands in the
-> playbook are illustrative starting points for sanctioned testing.
+> **What this is — and isn't.** Siege Tower is a **planner and documenter** for
+> authorized red-team assessments. It **suggests** which techniques and tools
+> fit an objective and **records** the plan. It does **not** execute anything,
+> launch any tool, or connect to any target, and it has **no ability to read or
+> move data** from a client's systems. Use it strictly within a signed scope and
+> Rules of Engagement.
 
 ---
 
@@ -175,9 +178,26 @@ make the output trustworthy: the ROE constrains the plans, box type changes the
 start state, every plan is legal and minimal, destructive actions are gated on
 permission, and the same ROE is reproducible.
 
+## Integrating with Bulwark
+
+Bulwark ships an adapter (`backend/app/services/siege_adapter.py`) and a
+planning API (`/api/siege/*`) that wrap this package **without changing it** —
+the engine stays standalone and dependency-free. The adapter:
+
+- maps Bulwark's `Engagement` record (its stored ROE + scope) to the engine's
+  `EngagementInput`, and serializes the ranked plans back for storage;
+- exposes reference catalogs (objectives, box types, platforms, restrictions)
+  and the technique tiles for a mouse-driven planning UI.
+
+The engine is imported, never invoked as a process. Because it has no network
+or subprocess access of its own, the planning logic **cannot act** on a target
+even by mistake — the API surface is create/plan/select/document only. In dev,
+docker-compose mounts this package into the backend at `/opt/siege-tower`; the
+adapter also probes `SIEGE_TOWER_PATH` and the repo-sibling directory.
+
 ## Roadmap
 
 - macOS and OT/ICS playbook depth to match the Windows/AD and cloud chains.
-- Adapter package for Bulwark (router, persistence, ATT&CK-sourced plays).
-- Execution tracking: mark steps attempted / succeeded / fell back, and compile
-  results into the final report.
+- Documentation module: record steps attempted / succeeded / fell back against
+  the selected plan, and compile the engagement report.
+- A mouse-driven, tile-based planning UI in Bulwark's frontend.

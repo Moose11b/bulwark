@@ -26,6 +26,7 @@ import itertools
 
 from .capabilities import BOX_TYPE_BASELINE, CAPABILITY_LABELS, GOAL_CAPABILITY
 from .playbook import DEFAULT_PLAYBOOK, playbook_by_id
+from .tools import tools_for
 from .schema import (
     EngagementInput, PlanOption, PlanResult, PlanStepView, Play, Restriction,
 )
@@ -433,6 +434,7 @@ def _build_option(
             fallback_technique_ids=fbs,
             detection=play.detection,
             references=list(play.references),
+            recommended_tools=tools_for(play.technique_id, play.tactic.value),
         ))
 
     total_minutes = sum(p.est_minutes for p in chain)

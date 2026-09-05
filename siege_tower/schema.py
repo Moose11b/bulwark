@@ -216,6 +216,7 @@ class PlanStepView:
     fallback_technique_ids: list[str]
     detection: str
     references: list[str]
+    recommended_tools: list[str] = field(default_factory=list)
 
 
 @dataclass
