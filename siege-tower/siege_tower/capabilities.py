@@ -28,11 +28,19 @@ CAP_LOCAL_ADMIN = "local_admin"                # admin on at least one host
 CAP_DOMAIN_ADMIN = "domain_admin"              # domain-wide privileged control
 CAP_CLOUD_ADMIN = "cloud_admin"                # tenant / cloud admin
 
+# Cloud / SaaS identity
+CAP_CLOUD_ACCOUNT = "cloud_account"            # valid cloud / Entra ID (Azure AD) creds
+CAP_CLOUD_RECON = "cloud_recon"                # cloud tenant/service enumeration
+
 # Knowledge
 CAP_SOURCE_CODE = "source_code"                # access to application source
 CAP_AD_RECON = "ad_recon"                       # internal AD/enumeration knowledge
 
+# Footholds / staging (extended)
+CAP_PERSISTENCE = "persistence"                # a durable re-entry mechanism
+
 # End states
+CAP_EMAIL_ACCESS = "email_access"              # mailbox / messaging access
 CAP_SENSITIVE_DATA_ACCESS = "sensitive_data_access"
 CAP_DATA_EXFILTRATED = "data_exfiltrated"
 CAP_IMPACT_DEPLOYED = "impact_deployed"         # ransomware/impact objective met
@@ -56,6 +64,7 @@ GOAL_CAPABILITY = {
     "data_exfiltration": CAP_DATA_EXFILTRATED,
     "ransomware_simulation": CAP_IMPACT_DEPLOYED,
     "cloud_takeover": CAP_CLOUD_ADMIN,
+    "email_compromise": CAP_EMAIL_ACCESS,
 }
 
 # Friendly names for capabilities in generated documentation.
@@ -73,6 +82,10 @@ CAPABILITY_LABELS = {
     CAP_CLOUD_ADMIN: "Cloud/tenant administrator control",
     CAP_SOURCE_CODE: "Application source code",
     CAP_AD_RECON: "Active Directory enumeration data",
+    CAP_CLOUD_ACCOUNT: "Valid cloud / Entra ID credentials",
+    CAP_CLOUD_RECON: "Cloud tenant enumeration data",
+    CAP_PERSISTENCE: "Durable re-entry mechanism",
+    CAP_EMAIL_ACCESS: "Mailbox / messaging access",
     CAP_SENSITIVE_DATA_ACCESS: "Access to sensitive data stores",
     CAP_DATA_EXFILTRATED: "Sensitive data exfiltrated",
     CAP_IMPACT_DEPLOYED: "Impact (e.g. ransomware) demonstrated",

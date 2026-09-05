@@ -31,7 +31,7 @@ NET = Platform.NETWORK
 AD = Platform.ACTIVE_DIRECTORY
 
 
-DEFAULT_PLAYBOOK: list[Play] = [
+_CORE_PLAYS: list[Play] = [
     # ── Reconnaissance ───────────────────────────────────────────
     Play(
         technique_id="T1595",
@@ -556,6 +556,16 @@ DEFAULT_PLAYBOOK: list[Play] = [
         references=("https://attack.mitre.org/techniques/T1486/",),
     ),
 ]
+
+
+# The seed playbook: the core external-to-domain chain plus the breadth
+# additions (more initial access, execution/persistence, extra escalation and
+# credential routes, richer collection/exfiltration, more impact, and full
+# cloud and email chains). Kept as one list so callers see a single knowledge
+# base; the split across modules is purely for reviewability.
+from .plays_ext import EXTENDED_PLAYS  # noqa: E402  (kept after _CORE_PLAYS)
+
+DEFAULT_PLAYBOOK: list[Play] = _CORE_PLAYS + EXTENDED_PLAYS
 
 
 def playbook_by_id(playbook: list[Play] | None = None) -> dict[str, Play]:

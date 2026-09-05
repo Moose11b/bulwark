@@ -219,3 +219,76 @@ def test_custom_playbook_is_honoured():
     result = build_plans(_roe(box_type=BoxType.BLACK), playbook=[])
     assert result.options == []
     assert result.considered_play_count == 0
+
+
+# ── Extended playbook breadth ────────────────────────────────────
+
+def test_playbook_has_broad_coverage():
+    from siege_tower.playbook import DEFAULT_PLAYBOOK
+    tactics = {p.tactic for p in DEFAULT_PLAYBOOK}
+    # Breadth check: the seed playbook should span most of the kill chain.
+    assert len(DEFAULT_PLAYBOOK) >= 40
+    assert len(tactics) >= 9
+
+
+def test_cloud_takeover_is_reachable():
+    result = build_plans(EngagementInput(
+        objective=Objective.CLOUD_TAKEOVER, box_type=BoxType.BLACK,
+    ))
+    assert result.options, "cloud takeover should now be reachable"
+    assert result.goal_capability == "cloud_admin"
+    used = {s.technique_id for o in result.options for s in o.steps}
+    # A cloud-admin play must appear (direct role abuse or hybrid pivot).
+    assert used & {"T1098", "T1484.002"}
+
+
+def test_hybrid_pivot_available_from_domain_admin():
+    # White-box windows/AD: on-prem DA can pivot to the cloud tenant.
+    result = build_plans(EngagementInput(
+        objective=Objective.CLOUD_TAKEOVER, box_type=BoxType.WHITE,
+        scope_platforms=[Platform.WINDOWS, Platform.ACTIVE_DIRECTORY, Platform.AZURE_AD],
+    ))
+    sequences = [tuple(s.technique_id for s in o.steps) for o in result.options]
+    assert any("T1484.002" in seq for seq in sequences)
+
+
+def test_email_compromise_objective():
+    result = build_plans(EngagementInput(
+        objective=Objective.EMAIL_COMPROMISE, box_type=BoxType.GREY,
+    ))
+    assert result.options
+    used = {s.technique_id for o in result.options for s in o.steps}
+    assert used & {"T1114", "T1114.002"}
+
+
+def test_data_exfiltration_has_multiple_distinct_plans():
+    result = build_plans(EngagementInput(
+        objective=Objective.DATA_EXFILTRATION, box_type=BoxType.BLACK,
+    ))
+    sequences = {tuple(s.technique_id for s in o.steps) for o in result.options}
+    assert len(sequences) >= 3, "breadth should yield several exfil paths"
+
+
+def test_unreachable_goal_returns_quickly_and_empty():
+    import time
+    # Destructive goal with evidence removal denied -> every impact play excluded.
+    roe = EngagementInput(
+        objective=Objective.RANSOMWARE_SIMULATION, box_type=BoxType.GREY,
+        scope_platforms=[Platform.WINDOWS, Platform.ACTIVE_DIRECTORY],
+        allow_evidence_removal=False,
+    )
+    t = time.perf_counter()
+    result = build_plans(roe)
+    elapsed = time.perf_counter() - t
+    assert result.options == []
+    assert elapsed < 1.0, "unreachable goals must short-circuit, not search"
+
+
+def test_reachability_precheck_matches_search():
+    from siege_tower.engine import _reachable, _search_chains, filter_playbook
+    roe = _roe(box_type=BoxType.BLACK)
+    allowed, _ = filter_playbook(DEFAULT_PLAYBOOK, roe)
+    start = start_capabilities(roe)
+    goal = build_plans(roe).goal_capability
+    assert _reachable(allowed, start, goal) is True
+    assert _search_chains(allowed, start, goal), "reachable goal must yield chains"

@@ -42,6 +42,7 @@ class Objective(str, Enum):
     DATA_EXFILTRATION = "data_exfiltration"
     RANSOMWARE_SIMULATION = "ransomware_simulation"
     CLOUD_TAKEOVER = "cloud_takeover"
+    EMAIL_COMPROMISE = "email_compromise"
 
 
 class Platform(str, Enum):
