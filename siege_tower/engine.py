@@ -36,6 +36,11 @@ _MAX_DEPTH = 9
 # Hard cap on distinct chains kept before ranking, so a large playbook can't
 # blow up the search.
 _MAX_CHAINS = 400
+# Ceiling on DFS node expansions. A reachable-but-branchy playbook can have an
+# enormous search tree; this bounds worst-case time even when few solutions are
+# found. Deterministic technique-ID ordering means we still explore the same
+# nodes first every run.
+_MAX_EXPANSIONS = 150_000
 
 # Which Play boolean flag each friendly restriction gates.
 _RESTRICTION_FLAG = {
@@ -110,6 +115,28 @@ def filter_playbook(
 
 # ── Chain search ─────────────────────────────────────────────────
 
+def _reachable(plays: list[Play], start: set[str], goal: str) -> bool:
+    """True if `goal` is reachable from `start` at all, ignoring order/one-use.
+
+    A cheap fixpoint over the union of every applicable play's effects. If the
+    goal is not in this closure, no ordered chain can reach it either — so the
+    expensive DFS can be skipped entirely. This is what keeps an impossible
+    objective (e.g. a destructive goal with destructive plays all forbidden)
+    from triggering a full combinatorial search that never finds a solution.
+    """
+    closure = set(start)
+    changed = True
+    while changed:
+        changed = False
+        for play in plays:
+            if play.requires.issubset(closure) and not play.provides.issubset(closure):
+                closure |= play.provides
+                changed = True
+        if goal in closure:
+            return True
+    return goal in closure
+
+
 def _search_chains(
     plays: list[Play], start: set[str], goal: str
 ) -> list[list[Play]]:
@@ -118,15 +145,21 @@ def _search_chains(
     Forward depth-first search over capability states. A play is applicable
     only when the operator already holds all of its `requires`, and only if it
     expands the state (adds a capability not already held) — that prunes no-op
-    recon loops and guarantees termination.
+    recon loops and guarantees termination. The search is bounded by a solution
+    cap, a depth cap, and a node-expansion budget so a large playbook can never
+    blow up the running time.
     """
+    if not _reachable(plays, start, goal):
+        return []
+
     # Deterministic order so identical inputs yield identical plans.
     ordered = sorted(plays, key=lambda p: p.technique_id)
     chains: list[list[Play]] = []
     seen_sequences: set[tuple[str, ...]] = set()
+    budget = [_MAX_EXPANSIONS]
 
     def dfs(state: set[str], path: list[Play]):
-        if len(chains) >= _MAX_CHAINS:
+        if len(chains) >= _MAX_CHAINS or budget[0] <= 0:
             return
         if goal in state:
             key = tuple(p.technique_id for p in path)
@@ -138,12 +171,15 @@ def _search_chains(
             return
         used = {p.technique_id for p in path}
         for play in ordered:
+            if budget[0] <= 0:
+                return
             if play.technique_id in used:
                 continue
             if not play.requires.issubset(state):
                 continue
             if play.provides.issubset(state):  # would not expand the state
                 continue
+            budget[0] -= 1
             dfs(state | play.provides, path + [play])
 
     dfs(set(start), [])

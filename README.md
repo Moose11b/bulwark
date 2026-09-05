@@ -32,6 +32,13 @@ The engine is a **deterministic capability-graph planner** — explicitly *not* 
 model. That matters for a red-team artifact: the same ROE always produces the
 same plans, and every step can be traced to the rule that put it there.
 
+The seed playbook (`playbook.py` + `plays_ext.py`) spans ~49 ATT&CK-mapped
+plays across the kill chain — reconnaissance, initial access, execution,
+persistence, privilege escalation, credential access, discovery, lateral
+movement, collection, exfiltration, and impact — including full cloud (Entra
+ID / M365) and hybrid on-prem-to-cloud chains. It is data, not code: bring your
+own `Play` list to extend or replace it (see below).
+
 1. **Start state.** The box type (black / grey / white) sets a baseline of
    starting *capabilities*; the access the client granted (`provided_access`:
    named creds, a VPN handle, source code) is added on top.
@@ -57,6 +64,7 @@ same plans, and every step can be traced to the rule that put it there.
 | `data_exfiltration`      | Sensitive data exfiltrated           |
 | `ransomware_simulation`  | Impact demonstrated (simulated)      |
 | `cloud_takeover`         | Cloud / tenant admin                 |
+| `email_compromise`       | Mailbox / messaging access           |
 
 ## Install
 
@@ -169,7 +177,7 @@ permission, and the same ROE is reproducible.
 
 ## Roadmap
 
-- Data-exfiltration and cloud-takeover playbook depth to match the AD chain.
+- macOS and OT/ICS playbook depth to match the Windows/AD and cloud chains.
 - Adapter package for Bulwark (router, persistence, ATT&CK-sourced plays).
 - Execution tracking: mark steps attempted / succeeded / fell back, and compile
   results into the final report.
