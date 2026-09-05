@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "siege-tower"
+version = "0.1.0"
+description = "Rules + ATT&CK attack-plan builder for authorized red teams."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Bulwark / Siege Tower" }]
+keywords = ["red-team", "attack-planning", "mitre-attack", "pentest", "roe"]
+# The core engine is intentionally dependency-free (standard library only),
+# so it drops into any host — including Bulwark — without pulling in a tree.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+siege-tower = "siege_tower.cli:main"
+
+[tool.setuptools]
+packages = ["siege_tower"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

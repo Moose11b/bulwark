@@ -1,0 +1,14 @@
+{
+  "objective": "domain_admin",
+  "box_type": "grey",
+  "scope_platforms": ["windows", "active_directory", "network"],
+  "provided_access": ["domain_user", "internal_network"],
+  "restrictions": ["stealth_required", "no_phishing"],
+  "forbidden_technique_ids": ["T1486"],
+  "forbidden_tactics": ["impact"],
+  "time_budget_hours": 40,
+  "allow_evidence_removal": false,
+  "emulate_adversary": "APT29",
+  "max_plans": 5,
+  "objective_note": "Prove reachability to the finance database from a standard domain user, without phishing, keeping noise low."
+}
