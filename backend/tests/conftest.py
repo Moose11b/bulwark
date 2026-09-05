@@ -43,6 +43,8 @@ from app.models import (  # noqa: E402
     Asset,
     AssetCredential,
     AuditLog,
+    Engagement,
+    EngagementPlan,
     Finding,
     Organisation,
     PlanTier,
@@ -93,6 +95,10 @@ async def test_user_and_org():
     # Teardown — wipe everything scoped to this org
     async with AsyncSessionLocal() as db:
         await db.execute(delete(Finding).where(Finding.org_id == org_id))
+        # Plans reference engagements (ON DELETE CASCADE), engagements reference
+        # the org/user, so both must go before those parents.
+        await db.execute(delete(EngagementPlan).where(EngagementPlan.org_id == org_id))
+        await db.execute(delete(Engagement).where(Engagement.org_id == org_id))
         await db.execute(delete(ScanSchedule).where(ScanSchedule.org_id == org_id))
         await db.execute(delete(Scan).where(Scan.org_id == org_id))
         # Audit rows reference the user, and credentials reference the asset,

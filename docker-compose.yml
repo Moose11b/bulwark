@@ -47,6 +47,9 @@ services:
     volumes:
       - ./backend:/app
       - scan_reports:/app/reports
+      # Siege Tower is a standalone, dependency-free package; mount it read-only
+      # so the backend can import it. The adapter probes /opt/siege-tower.
+      - ./siege-tower:/opt/siege-tower:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:

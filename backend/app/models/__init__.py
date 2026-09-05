@@ -411,3 +411,104 @@ class ThreatFeedSync(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+# ── Siege Tower: red-team engagement planning ─────────────────────
+# Siege Tower is a planning and documentation module. These tables hold only
+# what the red team enters — the Rules of Engagement, the scope, the generated
+# plans, and (later) the operator's notes on steps taken. They never hold data
+# pulled from a client's systems, and nothing here executes anything: the
+# module suggests and records, it does not act.
+
+class EngagementStatus(str, enum.Enum):
+    DRAFT = "draft"          # ROE/scope being entered
+    PLANNING = "planning"    # plans generated, team choosing an approach
+    ACTIVE = "active"        # engagement underway, steps being documented
+    COMPLETE = "complete"    # finished, report compiled
+    ARCHIVED = "archived"
+
+
+class Engagement(Base):
+    """A red-team engagement: its structured ROE, scope, and status.
+
+    Objective and box type are stored as plain strings (the Siege Tower engine's
+    vocabulary) rather than DB enums so the engine can add objectives without a
+    schema migration. `status` is a DB enum because its set is stable.
+    """
+    __tablename__ = "engagements"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organisations.id"), index=True)
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+
+    name: Mapped[str] = mapped_column(String(255))
+    client_name: Mapped[str | None] = mapped_column(String(255))
+    # A reference (id/URL/filename) to the signed authorization — never the
+    # document contents. Present so a plan can be traced to its authority.
+    authorization_ref: Mapped[str | None] = mapped_column(String(512))
+
+    # ── Structured Rules of Engagement (maps to the engine's EngagementInput)
+    objective: Mapped[str] = mapped_column(String(64))
+    box_type: Mapped[str] = mapped_column(String(16), default="black")
+    scope_platforms: Mapped[list] = mapped_column(JSONB, default=list)
+    in_scope_targets: Mapped[list] = mapped_column(JSONB, default=list)
+    out_of_scope: Mapped[list] = mapped_column(JSONB, default=list)
+    provided_access: Mapped[list] = mapped_column(JSONB, default=list)
+    restrictions: Mapped[list] = mapped_column(JSONB, default=list)
+    forbidden_technique_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    forbidden_tactics: Mapped[list] = mapped_column(JSONB, default=list)
+    time_budget_hours: Mapped[float | None] = mapped_column(Float)
+    allow_evidence_removal: Mapped[bool] = mapped_column(Boolean, default=False)
+    emulate_adversary: Mapped[str | None] = mapped_column(String(64))
+    roe_notes: Mapped[str | None] = mapped_column(Text)
+    objective_note: Mapped[str | None] = mapped_column(Text)
+
+    status: Mapped[EngagementStatus] = mapped_column(
+        Enum(EngagementStatus), default=EngagementStatus.DRAFT, index=True
+    )
+    # Result-level metadata from the last plan generation (goal capability,
+    # starting capabilities, and which plays the ROE excluded and why).
+    last_plan_meta: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    plans: Mapped[list["EngagementPlan"]] = relationship(
+        back_populates="engagement", cascade="all, delete-orphan"
+    )
+
+
+class EngagementPlan(Base):
+    """One ranked, generated attack plan persisted for an engagement.
+
+    A regeneration replaces the prior set for the engagement. `steps` is the
+    serialized, drill-down plan (technique, objective, suggested tooling,
+    fallbacks) exactly as the engine produced it.
+    """
+    __tablename__ = "engagement_plans"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    engagement_id: Mapped[str] = mapped_column(
+        ForeignKey("engagements.id", ondelete="CASCADE"), index=True
+    )
+    org_id: Mapped[str] = mapped_column(ForeignKey("organisations.id"), index=True)
+
+    plan_key: Mapped[str] = mapped_column(String(32))   # e.g. "plan-1"
+    title: Mapped[str] = mapped_column(String(512))
+    fit_score: Mapped[float] = mapped_column(Float, default=0.0)
+    rationale: Mapped[list] = mapped_column(JSONB, default=list)
+    steps: Mapped[list] = mapped_column(JSONB, default=list)
+    est_total_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    within_time_budget: Mapped[bool | None] = mapped_column(Boolean)
+    aggregate_noise: Mapped[float] = mapped_column(Float, default=0.0)
+    max_difficulty: Mapped[int] = mapped_column(Integer, default=0)
+    covered_tactics: Mapped[list] = mapped_column(JSONB, default=list)
+    warnings: Mapped[list] = mapped_column(JSONB, default=list)
+
+    # The plan the team chose to run (at most one per engagement).
+    is_selected: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    engagement: Mapped["Engagement"] = relationship(back_populates="plans")

@@ -79,6 +79,7 @@ from app.routers import (
     auth, scans, findings, assets, owasp,
     killchain, osint, compliance, reports,
     schedules, alerts, billing, webhooks, admin, threatintel, credentials,
+    siege,
 )
 
 app.include_router(auth.router,       prefix="/api/auth",       tags=["Auth"])
@@ -97,6 +98,7 @@ app.include_router(webhooks.router,   prefix="/api/webhooks",   tags=["Webhooks"
 app.include_router(admin.router,      prefix="/api/admin",      tags=["Admin"])
 app.include_router(threatintel.router, prefix="/api/threat-intel", tags=["Threat Intel"])
 app.include_router(credentials.router, prefix="/api/credentials", tags=["Scan Credentials"])
+app.include_router(siege.router,      prefix="/api/siege",      tags=["Siege Tower"])
 
 
 @app.get("/health", tags=["Health"])
