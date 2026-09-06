@@ -137,13 +137,15 @@ class EngagementInput:
 
 @dataclass(frozen=True)
 class PlayStep:
-    """One concrete, drill-down action inside a play.
+    """One drill-down action inside a play.
 
-    This is the highly-detailed layer: the command to run, what it does, and
-    what a successful run looks like.
+    Siege Tower is a planner and documenter, not an execution tool, so a step
+    is a plain-language description of what the operator does and what a
+    successful result looks like — deliberately not a runnable command. The
+    programs typically used for the step live on the play's tool suggestions
+    (see `tools.py`), not here.
     """
-    command: str
-    description: str
+    action: str
     expected_result: str
 
 

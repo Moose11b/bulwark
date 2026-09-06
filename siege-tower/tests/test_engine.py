@@ -152,10 +152,10 @@ def test_steps_carry_drilldown_detail():
     top = result.options[0]
     for step in top.steps:
         assert step.objective, "each step needs an engagement objective"
-        assert step.steps, "each step needs concrete drill-down commands"
+        assert step.steps, "each step needs concrete drill-down actions"
         assert step.success_indicator, "each step needs a success indicator"
-        for cmd in step.steps:
-            assert cmd["command"] and cmd["expected_result"]
+        for detail in step.steps:
+            assert detail["action"] and detail["expected_result"]
 
 
 def test_seed_plays_have_fallbacks_where_expected():
@@ -211,7 +211,10 @@ def test_markdown_render_has_key_sections():
     assert "# Siege Tower — Engagement Attack Plan" in md
     assert "### Steps (detailed)" in md
     assert "Excluded by the Rules of Engagement" in md
-    assert "| Command |" in md
+    assert "| Action |" in md
+    assert "Suggested tools:" in md
+    # The planner never emits runnable commands.
+    assert "msfvenom" not in md and "responder " not in md
 
 
 def test_custom_playbook_is_honoured():

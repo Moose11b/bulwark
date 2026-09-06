@@ -424,8 +424,7 @@ def _build_option(
             reliability=play.reliability,
             steps=[
                 {
-                    "command": s.command,
-                    "description": s.description,
+                    "action": s.action,
                     "expected_result": s.expected_result,
                 }
                 for s in play.steps

@@ -11,7 +11,7 @@ these with the core plays into many distinct, minimal plans. Kept in its own
 module so each domain stays reviewable; `playbook.py` concatenates it into
 DEFAULT_PLAYBOOK.
 
-Commands are illustrative starting points for authorized engagements only.
+Each step is a plain-language action; suggested tools live in tools.py. Siege Tower plans and documents — it never runs anything.
 """
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ AZ = Platform.AZURE_AD
 CLD = Platform.CLOUD
 
 
-def _p(command: str, description: str, expected: str) -> PlayStep:
-    return PlayStep(command=command, description=description, expected_result=expected)
+def _p(action: str, expected: str) -> PlayStep:
+    return PlayStep(action=action, expected_result=expected)
 
 
 EXTENDED_PLAYS: list[Play] = [
@@ -52,8 +52,8 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Convert known credentials into an internal foothold without exploiting anything.",
         prerequisite_note="Valid domain credentials and a directly exposed service.",
         steps=(
-            _p("nxc rdp $HOST -u $USER -p $PASS", "Confirm the creds work on the exposed service.", "Successful authentication banner."),
-            _p("xfreerdp /u:$USER /p:$PASS /v:$HOST", "Log in interactively.", "A desktop/session on an internal host."),
+            _p("Confirm the creds work on the exposed service.", "Successful authentication banner."),
+            _p("Log in interactively.", "A desktop/session on an internal host."),
         ),
         success_indicator="Authenticated interactive access to an internal host.",
         fallback_technique_ids=("T1133", "T1566"),
@@ -72,8 +72,8 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Gain execution via a component the target already trusts.",
         prerequisite_note="A modifiable dependency, package, or update channel in scope.",
         steps=(
-            _p("# identify a build/dependency the target ingests", "Map the software supply chain in scope.", "A tamperable component is identified."),
-            _p("# stage a benign, tracked marker payload with sign-off", "Introduce a controlled artifact that beacons.", "Execution when the component is consumed."),
+            _p("Map the software supply chain in scope.", "A tamperable component is identified."),
+            _p("Introduce a controlled artifact that beacons.", "Execution when the component is consumed."),
         ),
         success_indicator="A beacon returns from a host via the trusted component.",
         fallback_technique_ids=("T1190", "T1566"),
@@ -93,8 +93,8 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Abuse a trusted external connection to land inside the perimeter.",
         prerequisite_note="A partner/MSP/VPN trust reachable and in scope.",
         steps=(
-            _p("# enumerate partner/MSP ingress in scope", "Find the trusted connection.", "A trusted ingress path is identified."),
-            _p("# authenticate through the trusted channel", "Use the relationship to reach the LAN.", "Internal access via the trusted path."),
+            _p("Find the trusted connection.", "A trusted ingress path is identified."),
+            _p("Use the relationship to reach the LAN.", "Internal access via the trusted path."),
         ),
         success_indicator="Internal access obtained through a trusted external party.",
         fallback_technique_ids=("T1133",),
@@ -114,7 +114,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Land execution when a targeted user browses attacker-controlled content.",
         prerequisite_note="A plausible lure site and a target population.",
         steps=(
-            _p("# host the lure / poison a frequented site (with authorization)", "Stage the browser delivery.", "Payload served to visiting users."),
+            _p("Stage the browser delivery.", "Payload served to visiting users."),
         ),
         success_indicator="A beacon returns from a user who browsed the page.",
         fallback_technique_ids=("T1566",),
@@ -133,7 +133,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Establish an internal beachhead via physical access.",
         prerequisite_note="Authorized physical presence and an open port/jack.",
         steps=(
-            _p("# connect an implant (e.g. drop box) to a live jack", "Bridge an attacker device onto the LAN.", "The implant obtains a lease and calls home."),
+            _p("Bridge an attacker device onto the LAN.", "The implant obtains a lease and calls home."),
         ),
         success_indicator="A callback from an implant inside the network.",
         fallback_technique_ids=("T1091",),
@@ -154,7 +154,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Establish reliable, interactive control over the foothold.",
         prerequisite_note="Any code-execution primitive on a host.",
         steps=(
-            _p("powershell -enc <staged-beacon>  # or bash reverse shell", "Launch a beacon/agent for interactive control.", "A stable session/beacon checks in."),
+            _p("Launch a beacon/agent for interactive control.", "A stable session/beacon checks in."),
         ),
         success_indicator="An interactive C2 session is stable across commands.",
         fallback_technique_ids=("T1505.003",),
@@ -174,7 +174,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Keep reliable execution on the web server independent of the exploit.",
         prerequisite_note="Write access to a web-served directory.",
         steps=(
-            _p("# upload a minimal authenticated web shell to the web root", "Place a durable execution endpoint.", "Commands run via an HTTP request."),
+            _p("Place a durable execution endpoint.", "Commands run via an HTTP request."),
         ),
         success_indicator="Commands execute through the web shell over HTTP(S).",
         fallback_technique_ids=("T1059",),
@@ -194,7 +194,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Escalate to SYSTEM/root while establishing durable re-entry.",
         prerequisite_note="A weak service ACL, unquoted path, or writable unit file.",
         steps=(
-            _p("# reconfigure a writable service binPath to a payload; restart it", "Abuse the service to run as SYSTEM/root.", "A privileged process runs your payload."),
+            _p("Abuse the service to run as SYSTEM/root.", "A privileged process runs your payload."),
         ),
         success_indicator="A payload runs as SYSTEM/root and survives reboot.",
         fallback_technique_ids=("T1068", "T1548"),
@@ -214,7 +214,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Guarantee the team can regain access on a schedule.",
         prerequisite_note="Code execution on the host.",
         steps=(
-            _p("schtasks /create /sc onlogon /tn Updater /tr <payload>", "Create a triggered task.", "The payload runs on the chosen trigger."),
+            _p("Create a triggered task.", "The payload runs on the chosen trigger."),
         ),
         success_indicator="Access is regained automatically after loss.",
         fallback_technique_ids=("T1543",),
@@ -235,7 +235,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Elevate the foothold to local administrator/root.",
         prerequisite_note="A UAC-bypass primitive or a permissive sudo/setuid config.",
         steps=(
-            _p("# UAC bypass (fodhelper) or abuse a sudo rule / SUID binary", "Elevate using the confirmed mechanism.", "A high-integrity/root shell."),
+            _p("Elevate using the confirmed mechanism.", "A high-integrity/root shell."),
         ),
         success_indicator="A shell running as admin/root.",
         fallback_technique_ids=("T1068", "T1543"),
@@ -256,8 +256,8 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Recover domain credentials without touching LSASS.",
         prerequisite_note="Read access to shares/config likely to hold secrets.",
         steps=(
-            _p("# search SYSVOL for GPP cpassword; grep configs for secrets", "Look where credentials are commonly left.", "Recoverable credential material."),
-            _p("gpp-decrypt <cpassword>", "Decrypt any GPP passwords found.", "A cleartext domain password."),
+            _p("Look where credentials are commonly left.", "Recoverable credential material."),
+            _p("Decrypt any GPP passwords found.", "A cleartext domain password."),
         ),
         success_indicator="Valid domain credentials recovered from stored data.",
         fallback_technique_ids=("T1555", "T1003"),
@@ -276,7 +276,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Recover reusable secrets cached by applications.",
         prerequisite_note="User-context execution on the host.",
         steps=(
-            _p("# dump browser logins / Windows Credential Manager / keychain", "Extract stored application credentials.", "Cleartext or reusable secrets."),
+            _p("Extract stored application credentials.", "Cleartext or reusable secrets."),
         ),
         success_indicator="Reusable credentials or tokens recovered.",
         fallback_technique_ids=("T1552",),
@@ -295,8 +295,8 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Obtain domain credentials from the wire without any foothold creds.",
         prerequisite_note="LAN access where LLMNR/NBT-NS/mDNS is enabled.",
         steps=(
-            _p("responder -I eth0 -wtv", "Answer broadcast name lookups to capture auth.", "Net-NTLMv2 hashes from responding hosts."),
-            _p("hashcat -m 5600 captured.txt rockyou.txt", "Crack the captured hashes offline.", "A cleartext domain password."),
+            _p("Answer broadcast name lookups to capture auth.", "Net-NTLMv2 hashes from responding hosts."),
+            _p("Crack the captured hashes offline.", "A cleartext domain password."),
         ),
         success_indicator="A crackable/relayable hash yields valid credentials.",
         fallback_technique_ids=("T1557",),
@@ -316,8 +316,8 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Recover additional account passwords to widen privileged reach.",
         prerequisite_note="Accounts with 'do not require pre-auth' set.",
         steps=(
-            _p("GetNPUsers.py -request $DOMAIN/ -usersfile users.txt -no-pass", "Request AS-REP for pre-auth-disabled accounts.", "AS-REP hashes to crack."),
-            _p("hashcat -m 18200 asrep.txt rockyou.txt", "Crack offline.", "Cleartext passwords for those accounts."),
+            _p("Request AS-REP for pre-auth-disabled accounts.", "AS-REP hashes to crack."),
+            _p("Crack offline.", "Cleartext passwords for those accounts."),
         ),
         success_indicator="Cracked credentials expand access.",
         fallback_technique_ids=("T1558.003",),
@@ -338,7 +338,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Understand trusts and ACLs to choose an escalation route.",
         prerequisite_note="Any domain identity with LAN access.",
         steps=(
-            _p("nltest /domain_trusts  # and enumerate ACLs", "Enumerate trusts and delegation.", "Trust map and abusable relationships."),
+            _p("Enumerate trusts and delegation.", "Trust map and abusable relationships."),
         ),
         success_indicator="A concrete escalation path is selected.",
         fallback_technique_ids=("T1087",),
@@ -359,7 +359,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Escalate to Tier-0 by abusing a writable GPO linked to key OUs.",
         prerequisite_note="Write rights on a GPO from the AD ACL review.",
         steps=(
-            _p("# use SharpGPOAbuse to add an immediate scheduled task via the GPO", "Push a task to targeted computers/users.", "Code runs on a Tier-0 host."),
+            _p("Push a task to targeted computers/users.", "Code runs on a Tier-0 host."),
         ),
         success_indicator="Execution lands on a domain controller / Tier-0 asset.",
         fallback_technique_ids=("T1649", "T1558.003"),
@@ -378,7 +378,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Turn a privileged hash into domain-wide control.",
         prerequisite_note="A looted admin/DA-equivalent NTLM hash.",
         steps=(
-            _p("nxc smb $DC -u Administrator -H $NTLM -x whoami", "Authenticate to the DC with the hash.", "Command output as a privileged account."),
+            _p("Authenticate to the DC with the hash.", "Command output as a privileged account."),
         ),
         success_indicator="Privileged command execution on a domain controller.",
         fallback_technique_ids=("T1003.006",),
@@ -399,7 +399,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Locate and stage in-scope data on file shares.",
         prerequisite_note="A domain identity with share access.",
         steps=(
-            _p("nxc smb $RANGE -u $USER -p $PASS -M spider_plus", "Enumerate and index reachable shares.", "A map of sensitive files across shares."),
+            _p("Enumerate and index reachable shares.", "A map of sensitive files across shares."),
         ),
         success_indicator="Objective data located and staged.",
         fallback_technique_ids=("T1213", "T1005"),
@@ -418,7 +418,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Read/stage mailbox contents relevant to the objective.",
         prerequisite_note="A domain identity (or app impersonation) with mailbox rights.",
         steps=(
-            _p("# use EWS/MAPI with delegated or impersonation rights", "Access the target mailbox(es).", "Readable mailbox content."),
+            _p("Access the target mailbox(es).", "Readable mailbox content."),
         ),
         success_indicator="Target mailbox content is accessible.",
         fallback_technique_ids=("T1114.002",),
@@ -439,7 +439,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Prove exfiltration using the channel you already control.",
         prerequisite_note="Staged data and an established C2 channel.",
         steps=(
-            _p("# tunnel the archive back over the beacon's C2", "Move data inside existing C2 traffic.", "Archive received at the team sink."),
+            _p("Move data inside existing C2 traffic.", "Archive received at the team sink."),
         ),
         success_indicator="Data arrives intact via C2.",
         fallback_technique_ids=("T1567", "T1048"),
@@ -458,7 +458,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Demonstrate exfiltration over a channel egress filtering misses.",
         prerequisite_note="Outbound DNS/ICMP the team is permitted to use.",
         steps=(
-            _p("# chunk + encode the archive; exfil via DNS TXT queries", "Tunnel the data over DNS.", "Reassembled archive at the team resolver."),
+            _p("Tunnel the data over DNS.", "Reassembled archive at the team resolver."),
         ),
         success_indicator="Data reassembles at the team-controlled endpoint.",
         fallback_technique_ids=("T1567",),
@@ -480,7 +480,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Prove the blast radius for recovery-inhibition without real harm.",
         prerequisite_note="Explicit written sign-off for a simulated impact action.",
         steps=(
-            _p("# demonstrate the capability on a designated canary host, then revert", "Show reach on an agreed target only.", "Documented reach; fully reverted."),
+            _p("Show reach on an agreed target only.", "Documented reach; fully reverted."),
         ),
         success_indicator="Reach demonstrated on the agreed scope and reverted.",
         fallback_technique_ids=("T1486",),
@@ -500,7 +500,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Evidence the ability to destroy data without destroying any.",
         prerequisite_note="Explicit written sign-off; canary targets only.",
         steps=(
-            _p("# write a tracked benign marker to a designated canary set, then remove", "Simulate destruction on agreed targets.", "Reach documented; markers removed."),
+            _p("Simulate destruction on agreed targets.", "Reach documented; markers removed."),
         ),
         success_indicator="Capability evidenced on the agreed scope and reverted.",
         fallback_technique_ids=("T1486", "T1490"),
@@ -522,7 +522,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Get a first authenticated identity in the cloud tenant.",
         prerequisite_note="A discovered tenant and a user list.",
         steps=(
-            _p("# spray M365/Entra sign-in, or run an AiTM proxy to capture tokens", "Recover valid cloud credentials or session tokens.", "A working cloud sign-in / token."),
+            _p("Recover valid cloud credentials or session tokens.", "A working cloud sign-in / token."),
         ),
         success_indicator="A cloud identity authenticates to the tenant.",
         fallback_technique_ids=("T1566.002",),
@@ -543,7 +543,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Obtain cloud access via consented app permissions or captured tokens.",
         prerequisite_note="Target users and a sending channel.",
         steps=(
-            _p("# deliver an OAuth consent lure for a malicious app registration", "Get a user to grant delegated permissions.", "A refresh token / app access to the tenant."),
+            _p("Get a user to grant delegated permissions.", "A refresh token / app access to the tenant."),
         ),
         success_indicator="Delegated cloud access is obtained.",
         fallback_technique_ids=("T1078.004",),
@@ -563,7 +563,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Steal an instance role's credentials from the metadata service.",
         prerequisite_note="An SSRF-able request path from a cloud-hosted web app.",
         steps=(
-            _p("curl http://169.254.169.254/latest/meta-data/iam/security-credentials/", "Reach the metadata endpoint via SSRF.", "Temporary cloud role credentials."),
+            _p("Reach the metadata endpoint via SSRF.", "Temporary cloud role credentials."),
         ),
         success_indicator="Cloud role credentials are recovered and usable.",
         fallback_technique_ids=("T1078.004",),
@@ -582,7 +582,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Find the shortest path to a privileged cloud role.",
         prerequisite_note="Any authenticated cloud identity.",
         steps=(
-            _p("# run ROADrecon / AzureHound / ScoutSuite against the tenant", "Map identities, roles, and misconfigurations.", "A concrete cloud escalation path."),
+            _p("Map identities, roles, and misconfigurations.", "A concrete cloud escalation path."),
         ),
         success_indicator="A viable path to a privileged role is identified.",
         fallback_technique_ids=("T1087",),
@@ -602,7 +602,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Obtain Global/Tenant admin over the cloud environment.",
         prerequisite_note="An abusable role assignment, app owner right, or consent.",
         steps=(
-            _p("# add credentials to a privileged service principal, or self-assign a role", "Abuse the discovered path to elevate.", "Admin-level control of the tenant."),
+            _p("Abuse the discovered path to elevate.", "Admin-level control of the tenant."),
         ),
         success_indicator="Tenant/Global admin access is confirmed.",
         fallback_technique_ids=("T1548",),
@@ -622,7 +622,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Turn on-prem domain control into cloud tenant control.",
         prerequisite_note="Entra Connect / seamless SSO / federation reachable from on-prem.",
         steps=(
-            _p("# abuse the sync account (AADInternals) or federation trust", "Leverage the hybrid identity trust.", "A cloud identity with admin rights."),
+            _p("Leverage the hybrid identity trust.", "A cloud identity with admin rights."),
         ),
         success_indicator="Privileged cloud access is obtained from on-prem DA.",
         fallback_technique_ids=("T1098",),
@@ -642,7 +642,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Access cloud mailboxes relevant to the objective.",
         prerequisite_note="A cloud identity (or app) with mail read scope.",
         steps=(
-            _p("# use Graph API mail.read with the token to pull target mail", "Read/stage cloud mailbox content.", "Readable target mailbox content."),
+            _p("Read/stage cloud mailbox content.", "Readable target mailbox content."),
         ),
         success_indicator="Target cloud mailbox content is accessible.",
         fallback_technique_ids=("T1114",),
@@ -661,7 +661,7 @@ EXTENDED_PLAYS: list[Play] = [
         objective="Locate and stage in-scope data in cloud storage.",
         prerequisite_note="A cloud identity with storage read access.",
         steps=(
-            _p("# enumerate and read reachable buckets/blobs/containers", "Find and stage sensitive cloud objects.", "Objective data staged from cloud storage."),
+            _p("Find and stage sensitive cloud objects.", "Objective data staged from cloud storage."),
         ),
         success_indicator="Objective data is reachable in cloud storage.",
         fallback_technique_ids=("T1213",),
