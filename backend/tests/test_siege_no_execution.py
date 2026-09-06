@@ -13,6 +13,7 @@ _BACKEND = Path(__file__).resolve().parents[1]
 _FILES = [
     _BACKEND / "app" / "routers" / "siege.py",
     _BACKEND / "app" / "services" / "siege_adapter.py",
+    _BACKEND / "app" / "services" / "siege_report.py",
 ]
 
 # Tokens that would indicate command execution or a client connection to a

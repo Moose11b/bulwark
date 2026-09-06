@@ -512,3 +512,56 @@ class EngagementPlan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
     engagement: Mapped["Engagement"] = relationship(back_populates="plans")
+
+
+class LogOutcome(str, enum.Enum):
+    """What happened when the team worked a step."""
+    NOT_STARTED = "not_started"
+    ATTEMPTED = "attempted"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    FELL_BACK = "fell_back"      # primary failed, a fallback technique was used
+    BLOCKED = "blocked"          # stopped by a control / ROE / scope boundary
+    SKIPPED = "skipped"
+
+
+class EngagementLog(Base):
+    """One documented action taken during an engagement.
+
+    This is the "document as you go" record. Entries reference a plan step by
+    its stable identifiers (plan_key / technique_id / step_index) rather than a
+    foreign key, so regenerating the plan set never deletes the team's history.
+
+    It holds only what the operator writes: an outcome, notes, and *references*
+    to where evidence lives (filenames, ticket ids) — never evidence data or
+    anything pulled from the client's systems. Nothing here executes.
+    """
+    __tablename__ = "engagement_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    engagement_id: Mapped[str] = mapped_column(
+        ForeignKey("engagements.id", ondelete="CASCADE"), index=True
+    )
+    org_id: Mapped[str] = mapped_column(ForeignKey("organisations.id"), index=True)
+    operator_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+
+    # Which plan step this documents (denormalized, nullable for ad-hoc notes).
+    plan_key: Mapped[str | None] = mapped_column(String(32))
+    step_index: Mapped[int | None] = mapped_column(Integer)
+    technique_id: Mapped[str | None] = mapped_column(String(16), index=True)
+
+    title: Mapped[str] = mapped_column(String(512))
+    outcome: Mapped[LogOutcome] = mapped_column(
+        Enum(LogOutcome), default=LogOutcome.ATTEMPTED, index=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+    # References to evidence stored elsewhere (paths, filenames, ticket ids) —
+    # not the evidence itself.
+    evidence_refs: Mapped[list] = mapped_column(JSONB, default=list)
+    # Operator-noted hosts/IPs this action touched (free text the team types).
+    targets: Mapped[list] = mapped_column(JSONB, default=list)
+
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)

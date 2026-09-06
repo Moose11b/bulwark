@@ -44,6 +44,7 @@ from app.models import (  # noqa: E402
     AssetCredential,
     AuditLog,
     Engagement,
+    EngagementLog,
     EngagementPlan,
     Finding,
     Organisation,
@@ -97,6 +98,7 @@ async def test_user_and_org():
         await db.execute(delete(Finding).where(Finding.org_id == org_id))
         # Plans reference engagements (ON DELETE CASCADE), engagements reference
         # the org/user, so both must go before those parents.
+        await db.execute(delete(EngagementLog).where(EngagementLog.org_id == org_id))
         await db.execute(delete(EngagementPlan).where(EngagementPlan.org_id == org_id))
         await db.execute(delete(Engagement).where(Engagement.org_id == org_id))
         await db.execute(delete(ScanSchedule).where(ScanSchedule.org_id == org_id))

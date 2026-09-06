@@ -16,15 +16,19 @@ process/exec/target-connection machinery.
 """
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_org, get_current_user
 from app.database import get_db
-from app.models import Engagement, EngagementPlan, EngagementStatus, Organisation, User
+from app.models import (
+    Engagement, EngagementLog, EngagementPlan, EngagementStatus, LogOutcome,
+    Organisation, User,
+)
 from app.services import siege_adapter as adapter
+from app.services import siege_report
 
 router = APIRouter()
 
@@ -70,6 +74,32 @@ class EngagementUpdate(BaseModel):
     roe_notes: str | None = None
     objective_note: str | None = None
     status: str | None = None
+
+
+class LogCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=512)
+    outcome: str = "attempted"
+    plan_key: str | None = None
+    step_index: int | None = None
+    technique_id: str | None = None
+    notes: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    targets: list[str] = Field(default_factory=list)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class LogUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=512)
+    outcome: str | None = None
+    plan_key: str | None = None
+    step_index: int | None = None
+    technique_id: str | None = None
+    notes: str | None = None
+    evidence_refs: list[str] | None = None
+    targets: list[str] | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 # ── Serialization ────────────────────────────────────────────────
@@ -121,6 +151,33 @@ def _plan_dict(p: EngagementPlan) -> dict:
         "is_selected": p.is_selected,
         "generated_at": p.generated_at.isoformat() if p.generated_at else None,
     }
+
+
+def _log_dict(log: EngagementLog, operator_name: str | None = None) -> dict:
+    return {
+        "id": log.id,
+        "plan_key": log.plan_key,
+        "step_index": log.step_index,
+        "technique_id": log.technique_id,
+        "title": log.title,
+        "outcome": log.outcome.value if log.outcome else None,
+        "notes": log.notes,
+        "evidence_refs": log.evidence_refs,
+        "targets": log.targets,
+        "operator_id": log.operator_id,
+        "operator": operator_name,
+        "started_at": log.started_at.isoformat() if log.started_at else None,
+        "completed_at": log.completed_at.isoformat() if log.completed_at else None,
+        "created_at": log.created_at.isoformat() if log.created_at else None,
+    }
+
+
+async def _operator_names(db: AsyncSession, org_id: str) -> dict[str, str]:
+    """id -> display name for the org's users, to label log entries."""
+    rows = (await db.execute(
+        select(User.id, User.name, User.email).where(User.org_id == org_id)
+    )).all()
+    return {r.id: (r.name or r.email) for r in rows}
 
 
 async def _get_owned_engagement(
@@ -350,6 +407,147 @@ async def select_plan(
     await db.commit()
     await db.refresh(e)
     return _engagement_dict(e, include_plans=True)
+
+
+# ── Execution log (document-as-you-go) ───────────────────────────
+
+def _parse_outcome(value: str) -> LogOutcome:
+    try:
+        return LogOutcome(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid outcome: {value}")
+
+
+@router.get("/engagements/{engagement_id}/logs")
+async def list_logs(
+    engagement_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    org: Organisation = Depends(get_current_org),
+):
+    await _get_owned_engagement(engagement_id, db, org)
+    rows = (await db.execute(
+        select(EngagementLog).where(EngagementLog.engagement_id == engagement_id)
+        .order_by(EngagementLog.created_at.asc())
+    )).scalars().all()
+    names = await _operator_names(db, org.id)
+    return {"logs": [_log_dict(r, names.get(r.operator_id)) for r in rows]}
+
+
+@router.post("/engagements/{engagement_id}/logs", status_code=201)
+async def create_log(
+    engagement_id: str,
+    body: LogCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    org: Organisation = Depends(get_current_org),
+):
+    await _get_owned_engagement(engagement_id, db, org)
+    log = EngagementLog(
+        engagement_id=engagement_id,
+        org_id=org.id,
+        operator_id=user.id,
+        plan_key=body.plan_key,
+        step_index=body.step_index,
+        technique_id=body.technique_id,
+        title=body.title,
+        outcome=_parse_outcome(body.outcome),
+        notes=body.notes,
+        evidence_refs=body.evidence_refs,
+        targets=body.targets,
+        started_at=body.started_at,
+        completed_at=body.completed_at,
+    )
+    db.add(log)
+    await db.commit()
+    await db.refresh(log)
+    names = await _operator_names(db, org.id)
+    return _log_dict(log, names.get(log.operator_id))
+
+
+@router.patch("/engagements/{engagement_id}/logs/{log_id}")
+async def update_log(
+    engagement_id: str,
+    log_id: str,
+    body: LogUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    org: Organisation = Depends(get_current_org),
+):
+    log = (await db.execute(
+        select(EngagementLog).where(
+            EngagementLog.id == log_id,
+            EngagementLog.engagement_id == engagement_id,
+            EngagementLog.org_id == org.id,
+        )
+    )).scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+
+    fields = body.model_dump(exclude_unset=True)
+    if "outcome" in fields:
+        log.outcome = _parse_outcome(fields.pop("outcome"))
+    for key, value in fields.items():
+        setattr(log, key, value)
+    await db.commit()
+    await db.refresh(log)
+    names = await _operator_names(db, org.id)
+    return _log_dict(log, names.get(log.operator_id))
+
+
+@router.delete("/engagements/{engagement_id}/logs/{log_id}", status_code=204)
+async def delete_log(
+    engagement_id: str,
+    log_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    org: Organisation = Depends(get_current_org),
+):
+    log = (await db.execute(
+        select(EngagementLog).where(
+            EngagementLog.id == log_id,
+            EngagementLog.engagement_id == engagement_id,
+            EngagementLog.org_id == org.id,
+        )
+    )).scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+    await db.delete(log)
+    await db.commit()
+
+
+@router.get("/engagements/{engagement_id}/report")
+async def engagement_report(
+    engagement_id: str,
+    format: str = "json",
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    org: Organisation = Depends(get_current_org),
+):
+    """Compile the engagement report from the ROE, plans, and execution log.
+
+    A pure reformat of data already entered — no target is contacted and no
+    client data is read. `format=markdown` returns the document as text/markdown.
+    """
+    e = await _get_owned_engagement(engagement_id, db, org)
+    names = await _operator_names(db, org.id)
+    logs = (await db.execute(
+        select(EngagementLog).where(EngagementLog.engagement_id == engagement_id)
+        .order_by(EngagementLog.created_at.asc())
+    )).scalars().all()
+
+    engagement_data = _engagement_dict(e)
+    plans_data = [_plan_dict(p) for p in sorted(e.plans, key=lambda p: p.plan_key)]
+    logs_data = [_log_dict(r, names.get(r.operator_id)) for r in logs]
+
+    report = siege_report.build_report(engagement_data, plans_data, logs_data)
+
+    if format == "markdown":
+        return Response(
+            content=siege_report.render_markdown(report),
+            media_type="text/markdown",
+        )
+    return report
 
 
 # ── Helpers ──────────────────────────────────────────────────────

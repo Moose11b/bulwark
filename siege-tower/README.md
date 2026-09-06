@@ -187,7 +187,11 @@ the engine stays standalone and dependency-free. The adapter:
 - maps Bulwark's `Engagement` record (its stored ROE + scope) to the engine's
   `EngagementInput`, and serializes the ranked plans back for storage;
 - exposes reference catalogs (objectives, box types, platforms, restrictions)
-  and the technique tiles for a mouse-driven planning UI.
+  and the technique tiles for a mouse-driven planning UI;
+- records the execution log (what the team did against the selected plan) and
+  compiles the engagement report — ROE, selected plan, per-step coverage, and a
+  timeline — as JSON or Markdown. The log stores only operator notes and
+  evidence *references*, never data taken from a client's systems.
 
 The engine is imported, never invoked as a process. Because it has no network
 or subprocess access of its own, the planning logic **cannot act** on a target
@@ -198,6 +202,5 @@ adapter also probes `SIEGE_TOWER_PATH` and the repo-sibling directory.
 ## Roadmap
 
 - macOS and OT/ICS playbook depth to match the Windows/AD and cloud chains.
-- Documentation module: record steps attempted / succeeded / fell back against
-  the selected plan, and compile the engagement report.
 - A mouse-driven, tile-based planning UI in Bulwark's frontend.
+- PDF export of the engagement report (reusing Bulwark's report pipeline).
