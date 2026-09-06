@@ -1,206 +1,111 @@
 # Siege Tower
 
-**A rules + ATT&CK attack-plan builder for authorized red teams.**
+**A rules + [MITRE ATT&CK](https://attack.mitre.org/) engagement planner for authorized red teams — a standalone app that plans and documents, and never runs anything.**
 
 Siege Tower turns a structured Rules of Engagement (ROE) into a small set of
-ranked, [MITRE ATT&CK](https://attack.mitre.org/)-mapped attack plans. Each plan
-is broad at the top — an ordered kill chain — and drills down into the objective
-of each step, the **tools an operator would typically use**, expected results, a
-success indicator, and a fallback technique. The reasoning behind each plan is
-written out, so the output is an auditable engagement artifact, not a black box.
-
-It is a **standalone program** (library + CLI) with a **zero-dependency core**
-(standard library only), designed to also drop into the
-[Bulwark](../README.md) platform as a library.
+ranked, ATT&CK-mapped attack plans, lets a team **drag technique "pieces" into
+their own line of march** like a commander laying counters on a campaign map,
+then **walks the engagement step by step and documents every move** — compiling
+the field report as it goes.
 
 > **What this is — and isn't.** Siege Tower is a **planner and documenter** for
-> authorized red-team assessments. It **suggests** which techniques and tools
-> fit an objective and **records** the plan. It does **not** execute anything,
+> authorized assessments. It **suggests** which techniques and tools fit an
+> objective and **records** what the team did. It does **not** execute anything,
 > launch any tool, or connect to any target, and it has **no ability to read or
-> move data** from a client's systems. Use it strictly within a signed scope and
-> Rules of Engagement.
+> move data** from a client's systems. Use it strictly within a signed scope
+> and Rules of Engagement.
+
+The planning **engine is a dependency-free Python package** with no network or
+subprocess access, so the planning logic *cannot act on a target* — that safety
+posture is structural, not just a promise.
 
 ---
 
-## Why it exists
-
-Red teams lose time assembling each engagement by hand: re-deriving the kill
-chain, pulling technique detail from scattered references, and writing the plan
-and the report separately. Siege Tower accelerates the **build → execute →
-document** loop so a team can run more engagements without cutting corners.
-
-## How the engine works
-
-The engine is a **deterministic capability-graph planner** — explicitly *not* a
-model. That matters for a red-team artifact: the same ROE always produces the
-same plans, and every step can be traced to the rule that put it there.
-
-The seed playbook (`playbook.py` + `plays_ext.py`) spans ~49 ATT&CK-mapped
-plays across the kill chain — reconnaissance, initial access, execution,
-persistence, privilege escalation, credential access, discovery, lateral
-movement, collection, exfiltration, and impact — including full cloud (Entra
-ID / M365) and hybrid on-prem-to-cloud chains. It is data, not code: bring your
-own `Play` list to extend or replace it (see below).
-
-1. **Start state.** The box type (black / grey / white) sets a baseline of
-   starting *capabilities*; the access the client granted (`provided_access`:
-   named creds, a VPN handle, source code) is added on top.
-2. **Constraint filter.** Every play is checked against the ROE — in-scope
-   platforms, forbidden techniques/tactics, phishing / exploitation / DoS /
-   brute-force restrictions, and whether evidence removal or destructive actions
-   are permitted. Each excluded play is recorded *with its reason* for the audit
-   trail.
-3. **Search.** Plays form a graph: each one *requires* a set of capabilities and
-   *provides* another. The engine searches for chains that carry the team from
-   the start state to the goal capability implied by the objective, then reduces
-   each chain to a minimal spine where every step is load-bearing.
-4. **Rank.** Each distinct plan is scored on time-fit, stealth, reliability,
-   difficulty, and adversary-emulation match, and the best 3–5 are returned with
-   a plain-language rationale and warnings.
-
-### Objectives → goal capability
-
-| Objective                | Goal reached                         |
-| ------------------------ | ------------------------------------ |
-| `initial_foothold`       | Code execution on a host             |
-| `domain_admin`           | Domain-wide privileged control       |
-| `data_exfiltration`      | Sensitive data exfiltrated           |
-| `ransomware_simulation`  | Impact demonstrated (simulated)      |
-| `cloud_takeover`         | Cloud / tenant admin                 |
-| `email_compromise`       | Mailbox / messaging access           |
-
-## Install
+## Quickstart
 
 ```bash
-cd siege-tower
-pip install -e ".[dev]"     # editable install with pytest
-# or just run it in place — the core needs no dependencies
+git clone https://github.com/MooseArsenal/SiegeTower.git
+cd SiegeTower
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[server]"
+
+# Run the app, then open http://127.0.0.1:8000
+python -m server        # or: siege-tower-server   (SIEGE_RELOAD=1 for autoreload)
 ```
 
-## CLI usage
+Prefer the terminal? The engine ships a CLI with no dependencies at all:
 
 ```bash
-# Black-box, aim for Domain Admin, no phishing, 40-hour window, Markdown brief
-python -m siege_tower.cli --objective domain_admin --box black \
-    --scope windows,active_directory --restrict no_phishing --hours 40
-
-# Grey-box from a saved ROE file, emulate APT29, JSON out
-python -m siege_tower.cli --roe examples/engagement.json --emulate APT29 --format json
+pip install -e .
+python -m siege_tower.cli --objective domain_admin --box grey
 ```
 
-Flags override values from `--roe`, so a saved engagement can be tweaked
-per-run. See `python -m siege_tower.cli --help` for the full list.
+Engagements you save are stored in a local SQLite file (`siege.db`, git-ignored) —
+it never leaves your machine and holds only what you type.
 
-## Library usage
+## What you get
 
-```python
-from siege_tower import EngagementInput, Objective, BoxType, Platform, build_plans
-from siege_tower import plan_result_to_markdown
+- **Launch page** — start a new engagement, or review past ones (with progress),
+  gated behind a "client authorized data retention" switch.
+- **Scope** — enter the ROE as tiles: objective, box type, in-scope platforms,
+  restrictions, time budget, adversary to emulate.
+- **Plan** — 3–5 ranked, ATT&CK-mapped approaches, scored on fit to your ROE
+  (time, stealth, reliability), each explaining *why* it was offered.
+- **Build** — drag pieces from the technique library into your own ordered plan;
+  reorder, trim, or extend it to any length.
+- **Execute** — walk the plan step by step and document each move: outcome,
+  operator, timestamps, notes, evidence references, and targets touched, with a
+  live progress bar.
+- **Field report** — compiled from the ROE, the plan, and the log, as JSON or
+  Markdown.
 
-roe = EngagementInput(
-    objective=Objective.DOMAIN_ADMIN,
-    box_type=BoxType.BLACK,
-    scope_platforms=[Platform.WINDOWS, Platform.ACTIVE_DIRECTORY],
-    time_budget_hours=40,
-    emulate_adversary="APT29",
-)
+## Project structure
 
-result = build_plans(roe)
-for opt in result.options:
-    print(opt.plan_id, opt.fit_score, opt.title)
-
-print(plan_result_to_markdown(result))   # full engagement brief
+```
+siege_tower/        # the planning engine — zero dependencies, importable anywhere
+  playbook.py       #   the ATT&CK-mapped technique library (data, not code)
+  plays_ext.py      #   breadth: more initial access, cloud, email, impact …
+  tools.py          #   suggested tooling per technique
+  engine.py         #   the deterministic capability-graph planner
+  cli.py            #   standalone command-line interface
+server/             # a thin FastAPI app wrapping the engine (SQLite persistence)
+web/                # the planner UI (fetches from the server; no build step)
+integrations/bulwark/   # how to embed the engine in a larger platform
+tests/              # engine + API tests
 ```
 
-`build_plans` returns a `PlanResult` dataclass; `plan_result_to_dict` gives a
-JSON-serialisable form for an API or storage.
+## API
 
-## ROE file schema
+All endpoints are planning/documentation only — none execute anything or contact a target.
 
-All keys are optional except `objective`.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET`  | `/api/bootstrap` | reference vocab, technique library, ranked plans |
+| `POST` | `/api/plan` | rank plans for one ROE payload |
+| `GET`  | `/api/engagements` | list saved engagements (with progress) |
+| `POST` | `/api/engagements` | save a new engagement |
+| `GET/PUT/DELETE` | `/api/engagements/{id}` | read / update / remove one |
+| `GET`  | `/api/engagements/{id}/report?format=json\|markdown` | compile the report |
 
-```json
-{
-  "objective": "domain_admin",
-  "box_type": "grey",
-  "scope_platforms": ["windows", "active_directory"],
-  "provided_access": ["domain_user", "internal_network"],
-  "restrictions": ["no_phishing", "stealth_required"],
-  "forbidden_technique_ids": ["T1486"],
-  "forbidden_tactics": ["impact"],
-  "time_budget_hours": 40,
-  "allow_evidence_removal": false,
-  "emulate_adversary": "APT29",
-  "max_plans": 5,
-  "objective_note": "Prove reach to the finance DB."
-}
-```
+## Keeping the playbook current
 
-## Bringing your own playbook
+The technique library is **data** (`siege_tower/playbook.py` + `plays_ext.py`),
+not hardcoded UI. Add or edit `Play` entries and the API, the drag-and-drop
+palette, and the recommended plans all pick them up — so the tool keeps pace as
+tradecraft advances. Bring your own `Play` list to replace it entirely.
 
-The seed playbook (`siege_tower/playbook.py`) is **data, not code**. Pass your
-own list of `Play` objects to override it:
+## Integrating with a larger platform
 
-```python
-from siege_tower import build_plans, Play
-my_plays = [ ... ]
-result = build_plans(roe, playbook=my_plays)
-```
-
-This is the integration seam: a host can build `Play` objects from its own
-tradecraft library or from live ATT&CK data and feed them straight in.
-
-## Integrating into Bulwark
-
-The core engine imports nothing from Bulwark, so integration is a thin adapter,
-not a rewrite:
-
-- **Data.** Bulwark already syncs live ATT&CK techniques
-  (`MitreTechnique`). An adapter can enrich or generate `Play` objects from that
-  table and pass them as a custom playbook, keeping technique names and links
-  current.
-- **API.** Wrap `build_plans` in a FastAPI router under `/api/siege`, persist
-  `EngagementInput` and `PlanResult` per organisation, and reuse Bulwark's auth
-  and audit-log conventions.
-- **Reporting.** `plan_result_to_markdown` feeds Bulwark's existing report
-  generator so an engagement plan sits alongside scan findings.
-
-These are deliberately kept out of this package so it stays standalone.
+A host app can import the engine directly instead of running this server — see
+[`integrations/bulwark/`](integrations/bulwark/README.md).
 
 ## Tests
 
 ```bash
-python -m pytest
+pip install -e ".[dev]"
+pytest -q
 ```
 
-The suite is pure logic (no network, DB, or tools) and pins the guarantees that
-make the output trustworthy: the ROE constrains the plans, box type changes the
-start state, every plan is legal and minimal, destructive actions are gated on
-permission, and the same ROE is reproducible.
+## License
 
-## Integrating with Bulwark
-
-Bulwark ships an adapter (`backend/app/services/siege_adapter.py`) and a
-planning API (`/api/siege/*`) that wrap this package **without changing it** —
-the engine stays standalone and dependency-free. The adapter:
-
-- maps Bulwark's `Engagement` record (its stored ROE + scope) to the engine's
-  `EngagementInput`, and serializes the ranked plans back for storage;
-- exposes reference catalogs (objectives, box types, platforms, restrictions)
-  and the technique tiles for a mouse-driven planning UI;
-- records the execution log (what the team did against the selected plan) and
-  compiles the engagement report — ROE, selected plan, per-step coverage, and a
-  timeline — as JSON or Markdown. The log stores only operator notes and
-  evidence *references*, never data taken from a client's systems.
-
-The engine is imported, never invoked as a process. Because it has no network
-or subprocess access of its own, the planning logic **cannot act** on a target
-even by mistake — the API surface is create/plan/select/document only. In dev,
-docker-compose mounts this package into the backend at `/opt/siege-tower`; the
-adapter also probes `SIEGE_TOWER_PATH` and the repo-sibling directory.
-
-## Roadmap
-
-- macOS and OT/ICS playbook depth to match the Windows/AD and cloud chains.
-- A mouse-driven, tile-based planning UI in Bulwark's frontend.
-- PDF export of the engagement report (reusing Bulwark's report pipeline).
+MIT — see [LICENSE](LICENSE).

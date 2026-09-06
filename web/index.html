@@ -1,0 +1,1316 @@
+<title>Siege Tower Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Spectral:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ── Siege Tower — the commander's campaign map ───────────────────
+   A light, battle-worn war-room table: aged parchment, sepia ink, a
+   commander's-red route accent, faded steel-blue, brass wax seals.
+   Tiles read as map counters a commander places while briefing. */
+:root{
+  color-scheme: light;
+  --ground:#E6D9BE;        /* map table edge — frames the lighter field */
+  --ground-2:#D9C8A6;      /* recessed tracks / bar rails */
+  --surface:#F6F0E1;       /* parchment counter / dossier */
+  --surface-2:#EFE6D1;
+  --ink:#3A2E1E;           /* faded map ink */
+  --ink-soft:#6B5B41;
+  --ink-faint:#9C8A69;
+  --line:#CEBD97;
+  --line-strong:#B7A277;
+  --accent:#9C3B2E;        /* commander's grease-pencil red — the route */
+  --accent-deep:#7C2A20;
+  --accent-weak:#F0DFCB;   /* faint red-brown wash */
+  --accent-weak-2:#E4C9AE;
+  --azure:#3C5A6B;         /* faded steel-blue — supporting annotation */
+  --brass:#A9822C;         /* wax seal / medallion gold */
+  --brass-weak:#EBDCB4;
+  --good:#5E6B2C;          /* olive drab */
+  --warn:#AE7B1E;
+  --crit:#7E241B;          /* deep burnt red */
+  --shadow: 0 1px 2px rgba(58,46,30,.10), 0 10px 22px -14px rgba(58,46,30,.34);
+  --shadow-lift: 0 3px 6px rgba(58,46,30,.12), 0 22px 44px -20px rgba(58,46,30,.42);
+  --radius:12px; --radius-sm:9px;
+  --maxw:1200px;
+  --sans:"Spectral", Georgia, serif;
+  --display:"Fraunces", Georgia, serif;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; color:var(--ink); font-family:var(--sans);
+  font-size:15.5px; line-height:1.56; -webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(120% 90% at 12% -5%, #F3EAD4 0%, transparent 55%),
+    radial-gradient(120% 90% at 100% 0%, #EFE4C8 0%, transparent 50%),
+    radial-gradient(90% 80% at 80% 110%, #E7D9B8 0%, transparent 60%),
+    var(--ground);
+  background-attachment:fixed;
+}
+/* paper grain + faint foxing, kept very low so type stays crisp */
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  mix-blend-mode:multiply;
+}
+/* map field: coordinate grid + contour lines, behind everything */
+.map-bg{position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 63px, rgba(120,96,58,.05) 63px 64px),
+    repeating-linear-gradient(90deg, transparent 0 63px, rgba(120,96,58,.05) 63px 64px);}
+.map-bg svg{position:absolute; inset:0; width:100%; height:100%}
+.stains{position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(60px 46px at 22% 30%, rgba(120,80,40,.06), transparent 70%),
+    radial-gradient(90px 70px at 84% 62%, rgba(120,80,40,.05), transparent 70%),
+    radial-gradient(50px 40px at 68% 18%, rgba(120,80,40,.05), transparent 70%);}
+.app,.topbar,.scrim{position:relative; z-index:1}
+
+h1,h2,h3{font-family:var(--display); font-weight:600; letter-spacing:.005em; text-wrap:balance; margin:0}
+button{font-family:inherit}
+::selection{background:var(--accent-weak-2)}
+:focus-visible{outline:2.5px solid var(--accent); outline-offset:2px; border-radius:5px}
+.eyebrow{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent-deep)}
+.mono{font-family:var(--mono)} .tnum{font-variant-numeric:tabular-nums}
+
+/* ── Header cartouche (replaces rail + topbar) ──────────────────── */
+.topbar{position:sticky; top:0; z-index:20;
+  background:linear-gradient(180deg, rgba(246,240,225,.94), rgba(243,236,218,.9));
+  backdrop-filter:saturate(1.15) blur(8px);
+  border-bottom:1.5px solid var(--line-strong);
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset, 0 6px 18px -14px rgba(58,46,30,.5);}
+.topbar-in{max-width:var(--maxw); margin:0 auto; padding:14px clamp(18px,3.5vw,40px);
+  display:flex; align-items:center; gap:22px; flex-wrap:wrap}
+.brand{display:flex; align-items:center; gap:13px}
+.compass{width:44px; height:44px; flex:0 0 auto}
+.wm{font-family:var(--display); font-weight:700; font-size:21px; line-height:1; color:var(--ink)}
+.wm small{display:block; font-family:var(--mono); font-weight:400; font-size:9.5px;
+  letter-spacing:.28em; color:var(--accent-deep); text-transform:uppercase; margin-top:4px}
+
+.stepper{display:flex; align-items:stretch; gap:4px; margin:0 auto}
+.step{display:flex; gap:11px; align-items:center; padding:8px 15px 8px 11px; border-radius:999px;
+  cursor:pointer; color:var(--ink-soft); background:transparent; border:1.5px solid transparent;
+  text-align:left; transition:.16s}
+.step:hover{background:var(--surface); border-color:var(--line)}
+.step[aria-current="true"]{background:var(--surface); border-color:var(--accent);
+  box-shadow:var(--shadow)}
+.step[disabled]{opacity:.42; cursor:not-allowed}
+.step .idx{font-family:var(--mono); font-size:12px; width:26px; height:26px; flex:0 0 auto;
+  display:grid; place-items:center; border-radius:50%; border:1.5px solid var(--line-strong);
+  color:var(--ink-soft); background:var(--surface-2)}
+.step[aria-current="true"] .idx{background:var(--accent); border-color:var(--accent-deep); color:#F6F0E1}
+.step .st{font-family:var(--display); font-weight:600; font-size:14px; line-height:1.1}
+.step .sd{font-size:11.5px; color:var(--ink-faint); margin-top:1px; line-height:1.2}
+@media (max-width:1080px){ .step .sd{display:none} }
+
+.eng-block{display:flex; flex-direction:column; align-items:flex-end; gap:2px; min-width:0}
+.eng-title{font-family:var(--display); font-size:15px; font-weight:600; line-height:1.1}
+.eng-sub{font-size:12px; color:var(--ink-faint); font-family:var(--mono); letter-spacing:.02em}
+.roe-chips{display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; margin-top:5px}
+.chip{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:5px;
+  background:var(--surface); border:1px solid var(--line); font-size:11.5px; color:var(--ink-soft); white-space:nowrap}
+.chip .k{font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
+.chip.accent{background:var(--accent-weak); border-color:var(--accent-weak-2); color:var(--accent-deep)}
+
+/* ── Stage frame ────────────────────────────────────────────────── */
+.main{min-width:0}
+.stage{max-width:var(--maxw); margin:0 auto; width:100%;
+  padding:clamp(22px,3.2vw,38px) clamp(18px,3.5vw,40px) 90px}
+.stage-head{margin-bottom:24px}
+.stage-head h1{font-size:clamp(28px,3.6vw,38px); line-height:1.04; margin-top:6px}
+.stage-head p{color:var(--ink-soft); margin:11px 0 0; max-width:64ch; font-size:15.5px}
+.hidden{display:none !important}
+.section{margin-top:30px}
+.section > .lbl{display:flex; align-items:baseline; gap:11px; margin-bottom:14px;
+  border-bottom:1px solid var(--line); padding-bottom:7px}
+.section > .lbl h2{font-size:16px; font-family:var(--display)}
+.section > .lbl .hint{font-size:12.5px; color:var(--ink-faint)}
+
+/* ── Map counters (tiles) ───────────────────────────────────────── */
+.tiles{display:grid; gap:13px}
+.tiles.obj{grid-template-columns:repeat(auto-fill,minmax(224px,1fr))}
+.tiles.box{grid-template-columns:repeat(auto-fit,minmax(224px,1fr))}
+.tile{position:relative; text-align:left; background:
+    linear-gradient(180deg,#F8F2E4,#F1E7D2); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); padding:15px 15px 14px; cursor:pointer; transition:.16s;
+  display:flex; flex-direction:column; gap:8px;
+  box-shadow:var(--shadow), inset 0 0 0 1.5px rgba(255,255,255,.4), inset 0 0 0 4px rgba(206,189,151,.18);}
+.tile:hover{transform:translateY(-3px); box-shadow:var(--shadow-lift), inset 0 0 0 1.5px rgba(255,255,255,.4)}
+.tile .ti{display:flex; align-items:center; gap:11px}
+.tile .ic{width:36px; height:36px; flex:0 0 auto; border-radius:50%; display:grid; place-items:center;
+  background:var(--surface-2); color:var(--accent-deep); border:1.5px solid var(--line-strong)}
+.tile h3{font-size:16px; font-weight:600}
+.tile p{font-size:12.5px; color:var(--ink-soft); margin:0; line-height:1.42}
+.tile[aria-pressed="true"]{border-color:var(--accent);
+  box-shadow:0 0 0 2px var(--accent), var(--shadow-lift), inset 0 0 0 4px rgba(156,59,46,.10)}
+.tile[aria-pressed="true"] .ic{background:var(--accent); color:#F6F0E1; border-color:var(--accent-deep)}
+.tile .tick{position:absolute; top:11px; right:11px; width:26px; height:26px; border-radius:50%;
+  background:radial-gradient(circle at 40% 35%, #C34B33, var(--accent-deep)); color:#F6E9CE;
+  display:none; place-items:center; box-shadow:0 2px 4px rgba(58,46,30,.4), inset 0 1px 2px rgba(255,255,255,.35)}
+.tile[aria-pressed="true"] .tick{display:grid}
+.tile .box-k{font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-deep)}
+
+/* map-pin chips (multiselect) */
+.chipset{display:flex; flex-wrap:wrap; gap:9px}
+.mchip{border:1.5px solid var(--line-strong); background:var(--surface); border-radius:7px; padding:7px 13px;
+  font-size:13.5px; cursor:pointer; color:var(--ink-soft); transition:.14s; display:inline-flex; gap:8px; align-items:center;
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset}
+.mchip:hover{border-color:var(--accent-weak-2); transform:translateY(-1px)}
+.mchip[aria-pressed="true"]{background:var(--accent-weak); border-color:var(--accent); color:var(--accent-deep); font-weight:600}
+.mchip .dot{width:8px; height:8px; border-radius:50%; background:var(--line-strong)}
+.mchip[aria-pressed="true"] .dot{background:var(--accent)}
+
+/* form fields — like ledger entries */
+.field-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px}
+.field{display:flex; flex-direction:column; gap:6px}
+.field label{font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint)}
+.field input{font-family:var(--sans); font-size:15px; padding:10px 13px; border:1.5px solid var(--line-strong);
+  border-radius:8px; background:var(--surface); color:var(--ink)}
+.field input:focus{border-color:var(--accent); outline:none; box-shadow:0 0 0 3px var(--accent-weak)}
+
+.actionbar{position:sticky; bottom:0; margin-top:34px; padding:16px 0 6px;
+  background:linear-gradient(0deg,var(--ground) 60%,transparent); display:flex; gap:14px; align-items:center}
+.btn{font-family:var(--display); font-size:15px; font-weight:600; padding:11px 22px; border-radius:9px;
+  border:1.5px solid transparent; cursor:pointer; display:inline-flex; align-items:center; gap:9px; transition:.15s}
+.btn-primary{background:linear-gradient(180deg,#B0463636,transparent) , var(--accent); color:#F7EDD8;
+  border-color:var(--accent-deep); box-shadow:0 8px 18px -10px rgba(124,42,32,.7), inset 0 1px 0 rgba(255,255,255,.25)}
+.btn-primary:hover{background:var(--accent-deep)}
+.btn-ghost{background:var(--surface); border-color:var(--line-strong); color:var(--ink-soft)}
+.btn-ghost:hover{border-color:var(--accent-weak-2); color:var(--ink)}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+.actionbar .spacer{margin-left:auto}
+.actionbar .note{font-size:13px; color:var(--ink-faint); font-style:italic}
+
+/* ── Field-order dossiers (plan cards) ──────────────────────────── */
+.plangrid{display:grid; gap:17px; grid-template-columns:repeat(auto-fill,minmax(304px,1fr))}
+.plan{position:relative; background:linear-gradient(180deg,#F8F2E4,#F1E7D1);
+  border:1.5px solid var(--line-strong); border-radius:var(--radius); padding:17px; display:flex;
+  flex-direction:column; gap:13px; cursor:pointer; transition:.16s;
+  box-shadow:var(--shadow), inset 0 0 0 1px rgba(255,255,255,.4)}
+.plan::before{content:""; position:absolute; left:14px; right:14px; top:0; height:3px;
+  background:linear-gradient(90deg,var(--accent),var(--brass)); border-radius:0 0 3px 3px; opacity:.7}
+.plan:hover{transform:translateY(-3px); box-shadow:var(--shadow-lift)}
+.plan.sel{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent), var(--shadow-lift)}
+.plan-top{display:flex; align-items:flex-start; gap:14px}
+.medal{--p:0; position:relative; width:58px; height:58px; flex:0 0 auto; border-radius:50%;
+  background:conic-gradient(var(--brass) calc(var(--p)*1%), rgba(169,130,44,.22) 0); padding:4px}
+.medal::after{content:""; position:absolute; inset:4px; border-radius:50%;
+  background:radial-gradient(circle at 38% 32%, #B4472F, var(--accent-deep));
+  box-shadow:inset 0 2px 4px rgba(255,255,255,.25), inset 0 -3px 6px rgba(0,0,0,.35)}
+.medal .v{position:relative; z-index:1; font-family:var(--display); font-weight:700; font-size:18px;
+  color:#F6E7C9; line-height:1; display:grid; place-items:center; height:100%; text-shadow:0 1px 1px rgba(0,0,0,.4)}
+.medal .u{display:none}
+.plan .rank{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent-deep)}
+.plan h3{font-size:17px; line-height:1.16; margin-top:4px}
+.tacts{display:flex; flex-wrap:wrap; gap:6px}
+.tact{font-family:var(--mono); font-size:10px; letter-spacing:.05em; padding:3px 8px; border-radius:4px;
+  background:var(--surface-2); border:1px solid var(--line); color:var(--ink-soft); text-transform:uppercase}
+.plan .why{font-size:13.5px; color:var(--ink-soft); line-height:1.45}
+.meters{display:flex; flex-direction:column; gap:9px}
+.meter{display:grid; grid-template-columns:76px 1fr auto; align-items:center; gap:10px}
+.meter .ml{font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
+.meter .mv{font-size:12px; color:var(--ink-soft); font-variant-numeric:tabular-nums}
+.seg{display:flex; gap:3px}
+.seg i{height:8px; width:100%; border-radius:2px; background:var(--ground-2); box-shadow:inset 0 1px 1px rgba(58,46,30,.12)}
+.seg i.on{background:var(--azure)}
+.seg.warn i.on{background:var(--warn)} .seg.crit i.on{background:var(--accent)}
+.bar{height:8px; border-radius:3px; background:var(--ground-2); position:relative; overflow:hidden; box-shadow:inset 0 1px 1px rgba(58,46,30,.12)}
+.bar > span{position:absolute; inset:0 auto 0 0; background:var(--azure); border-radius:3px}
+.bar.over > span{background:var(--accent)}
+.plan-foot{display:flex; align-items:center; gap:10px; margin-top:1px}
+.plan-foot .steps{font-size:12.5px; color:var(--ink-faint)}
+.plan-foot .go{margin-left:auto; font-family:var(--display); font-weight:600; color:var(--accent-deep); font-size:13.5px; display:inline-flex; gap:5px; align-items:center}
+.selflag{position:absolute; top:-9px; right:14px; font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:#F6E9CE; background:var(--accent); border:1.5px solid var(--accent-deep);
+  padding:3px 9px; border-radius:4px; display:none; box-shadow:var(--shadow)}
+.plan.sel .selflag{display:inline-block}
+
+/* ── Campaign route (plan detail) ──────────────────────────────── */
+.detail-head{background:linear-gradient(180deg,#F8F2E4,#F1E7D1); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start}
+.detail-head .dh-main{flex:1 1 320px; min-width:0}
+.detail-head h1{font-size:25px; line-height:1.1}
+.rationale{margin:12px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:6px}
+.rationale li{font-size:14px; color:var(--ink-soft); display:flex; gap:9px; align-items:flex-start}
+.rationale li svg{flex:0 0 auto; margin-top:4px; color:var(--accent)}
+.dh-stats{display:flex; gap:22px; flex-wrap:wrap}
+.dstat .n{font-family:var(--display); font-weight:700; font-size:23px; line-height:1}
+.dstat .l{font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); margin-top:5px}
+.coverwrap{min-width:150px}
+.warnbox{margin-top:14px; display:flex; gap:10px; align-items:flex-start; background:#F3E7C7;
+  border:1.5px solid #D9BE7E; border-radius:9px; padding:11px 13px; font-size:13.5px; color:#7C5C15}
+.warnbox svg{flex:0 0 auto; margin-top:2px}
+
+.spine{margin-top:22px; position:relative; padding-left:20px}
+.spine::before{content:""; position:absolute; left:36px; top:8px; bottom:20px; width:0;
+  border-left:2.5px dashed var(--line-strong)}
+.node{position:relative; margin-bottom:13px}
+.node-card{background:linear-gradient(180deg,#F8F2E4,#F1E7D1); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden}
+.node-head{display:flex; gap:15px; align-items:flex-start; padding:15px 18px; cursor:pointer; width:100%;
+  background:none; border:0; text-align:left; color:inherit}
+.node-head:hover{background:var(--surface-2)}
+.knot{position:relative; flex:0 0 auto}
+.knot .num{width:36px; height:36px; border-radius:50%; display:grid; place-items:center;
+  font-family:var(--mono); font-weight:600; font-size:14px;
+  background:var(--surface); color:var(--accent-deep); border:2.5px solid var(--accent);
+  box-shadow:0 2px 5px rgba(58,46,30,.3)}
+.node.done .knot .num{background:radial-gradient(circle at 40% 35%,#B4472F,var(--accent-deep)); color:#F6E9CE; border-color:var(--accent-deep)}
+.nh-main{flex:1 1 auto; min-width:0}
+.nh-top{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.tid{font-family:var(--mono); font-size:12px; font-weight:600; color:var(--accent-deep);
+  background:var(--accent-weak); padding:2px 7px; border-radius:4px; border:1px solid var(--accent-weak-2)}
+.nh-main h3{font-size:16.5px; margin-top:5px}
+.nh-main .sm{font-size:13.5px; color:var(--ink-soft); margin-top:3px}
+.nh-right{display:flex; align-items:center; gap:14px; flex:0 0 auto}
+.mini{display:flex; gap:3px; align-items:center}
+.mini .lab{font-family:var(--mono); font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); margin-right:5px}
+.mini i{width:6px; height:13px; border-radius:2px; background:var(--ground-2)}
+.mini i.on{background:var(--accent)}
+.chev{transition:transform .2s; color:var(--ink-faint)}
+.node.open .chev{transform:rotate(180deg)}
+.node-body{padding:2px 20px 20px 70px; display:none; animation:fade .2s ease}
+.node.open .node-body{display:block}
+@keyframes fade{from{opacity:0; transform:translateY(-3px)}to{opacity:1; transform:none}}
+.nb-grid{display:grid; gap:20px; grid-template-columns:1fr; margin-top:6px}
+@media(min-width:800px){.nb-grid{grid-template-columns:1.35fr 1fr}}
+.nb-block .bh{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:8px}
+.actions-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:11px}
+.actions-list li{display:flex; gap:12px; align-items:flex-start}
+.actions-list .an{font-family:var(--mono); font-size:11px; color:#F6E9CE; background:var(--azure);
+  width:22px; height:22px; border-radius:5px; display:grid; place-items:center; flex:0 0 auto; margin-top:1px}
+.actions-list .at{font-size:14px} .actions-list .ax{font-size:12.5px; color:var(--ink-faint); margin-top:2px}
+.toolchips{display:flex; flex-wrap:wrap; gap:7px}
+.toolchip{font-family:var(--mono); font-size:11.5px; padding:4px 10px; border-radius:5px; background:var(--brass-weak);
+  color:#6E560F; border:1px solid #DBC488}
+.kv{display:flex; flex-direction:column; gap:12px}
+.kv .row .rk{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:3px}
+.kv .row .rv{font-size:13.5px; color:var(--ink-soft)}
+.pill{display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:3px 9px; border-radius:5px;
+  background:var(--surface-2); border:1px solid var(--line); color:var(--ink-soft)}
+.pill.good{background:#EBEEDB; border-color:#C7CE9E; color:var(--good)}
+.fallbacks{display:flex; flex-wrap:wrap; gap:6px}
+.fallbacks .fb{font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:4px;
+  border:1px dashed var(--line-strong); color:var(--ink-soft)}
+.doc{margin-top:16px; border-top:1px dashed var(--line-strong); padding-top:14px}
+.doc .dl{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:9px}
+.segmented{display:inline-flex; background:var(--ground-2); border-radius:8px; padding:3px; gap:2px; flex-wrap:wrap}
+.segmented button{border:0; background:none; font-family:var(--mono); font-size:11px; letter-spacing:.03em;
+  padding:6px 11px; border-radius:6px; cursor:pointer; color:var(--ink-soft); text-transform:uppercase}
+.segmented button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+.segmented button[data-oc="succeeded"][aria-pressed="true"]{color:var(--good)}
+.segmented button[data-oc="failed"][aria-pressed="true"],.segmented button[data-oc="blocked"][aria-pressed="true"]{color:var(--crit)}
+.segmented button[data-oc="fell_back"][aria-pressed="true"]{color:var(--warn)}
+
+/* ── Report modal (a compiled field report) ─────────────────────── */
+.scrim{position:fixed; inset:0; background:rgba(58,46,30,.5); backdrop-filter:blur(3px);
+  display:none; place-items:center; padding:28px; z-index:40}
+.scrim.open{display:grid}
+.modal{background:var(--surface); border-radius:14px; max-width:780px; width:100%; max-height:86vh; overflow:auto;
+  box-shadow:0 40px 90px -30px rgba(58,46,30,.7); border:1.5px solid var(--line-strong)}
+.modal-head{position:sticky; top:0; background:var(--surface); border-bottom:1.5px solid var(--line-strong);
+  padding:17px 24px; display:flex; align-items:center; gap:13px}
+.modal-head h2{font-size:19px}
+.modal-head .x{margin-left:auto; border:1px solid var(--line-strong); background:var(--surface-2); width:34px; height:34px;
+  border-radius:8px; cursor:pointer; color:var(--ink-soft); display:grid; place-items:center}
+.report{padding:22px 24px 30px}
+.report h3{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent-deep); margin:24px 0 11px; padding-bottom:6px; border-bottom:1.5px solid var(--line)}
+.report h3:first-child{margin-top:0}
+.rgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:15px}
+.rgrid .ri .rk{font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
+.rgrid .ri .rv{font-size:14.5px; margin-top:3px}
+.logrow{display:flex; gap:12px; padding:11px 0; border-bottom:1px solid var(--line); align-items:flex-start}
+.logrow:last-child{border-bottom:0}
+.ocdot{width:10px; height:10px; border-radius:50%; margin-top:6px; flex:0 0 auto; background:var(--ink-faint); border:1px solid rgba(0,0,0,.15)}
+.ocdot.succeeded{background:var(--good)} .ocdot.fell_back{background:var(--warn)}
+.ocdot.failed,.ocdot.blocked{background:var(--crit)} .ocdot.attempted{background:var(--azure)}
+.logrow .lt{font-size:14px; font-weight:600} .logrow .lx{font-size:12px; color:var(--ink-faint); font-family:var(--mono)}
+.covbig{display:flex; align-items:baseline; gap:9px}
+.covbig .n{font-family:var(--display); font-weight:700; font-size:36px; color:var(--accent-deep)}
+
+@media (max-width:820px){
+  .topbar-in{gap:14px} .stepper{order:3; flex:1 1 100%; justify-content:space-between}
+  .eng-block{align-items:flex-start} .roe-chips{justify-content:flex-start}
+}
+/* ── Header progress rail (advance through the engagement) ──────── */
+.hprog{max-width:var(--maxw); margin:0 auto; padding:0 clamp(18px,3.5vw,40px) 10px; display:flex; gap:6px}
+.hprog i{height:4px; flex:1; border-radius:3px; background:var(--ground-2); overflow:hidden; position:relative}
+.hprog i.on{background:linear-gradient(90deg,var(--accent),var(--brass))}
+.brand{cursor:pointer}
+
+/* ── Launch page ────────────────────────────────────────────────── */
+.hero{background:linear-gradient(180deg,#F8F2E4,#F0E5CE); border:1.5px solid var(--line-strong);
+  border-radius:16px; padding:clamp(26px,4vw,44px); box-shadow:var(--shadow); position:relative; overflow:hidden}
+.hero::after{content:""; position:absolute; right:-40px; top:-40px; width:240px; height:240px; opacity:.5;
+  background:radial-gradient(circle,transparent 58%, rgba(156,59,46,.10) 59%, transparent 62%),
+             radial-gradient(circle,transparent 40%, rgba(60,90,107,.10) 41%, transparent 44%);}
+.hero .eyebrow{margin-bottom:10px}
+.hero h1{font-size:clamp(30px,4.6vw,46px); line-height:1.02; max-width:16ch}
+.hero p{font-size:16px; color:var(--ink-soft); max-width:60ch; margin:14px 0 0}
+.hero-cta{display:flex; gap:13px; flex-wrap:wrap; margin-top:24px}
+.btn-lg{font-size:16px; padding:14px 26px}
+.hero-stats{display:flex; gap:26px; flex-wrap:wrap; margin-top:26px; padding-top:20px; border-top:1px solid var(--line)}
+.hstat .n{font-family:var(--display); font-weight:700; font-size:26px; line-height:1}
+.hstat .l{font-family:var(--mono); font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); margin-top:4px}
+
+.history{margin-top:34px}
+.history-head{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:16px;
+  border-bottom:1px solid var(--line); padding-bottom:10px}
+.history-head h2{font-size:19px}
+.history-head .sub{font-size:12.5px; color:var(--ink-faint)}
+.switch{margin-left:auto; display:inline-flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; color:var(--ink-soft)}
+.switch .track{width:44px; height:24px; border-radius:999px; background:var(--ground-2); border:1.5px solid var(--line-strong);
+  position:relative; transition:.18s}
+.switch .track::after{content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+  background:var(--surface); box-shadow:var(--shadow); transition:.18s}
+.switch[aria-pressed="true"] .track{background:var(--accent); border-color:var(--accent-deep)}
+.switch[aria-pressed="true"] .track::after{transform:translateX(20px)}
+
+.eng-grid{display:grid; gap:15px; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); position:relative}
+.eng-card{background:linear-gradient(180deg,#F8F2E4,#F1E7D1); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); cursor:pointer; transition:.16s; display:flex; flex-direction:column; gap:10px}
+.eng-card:hover{transform:translateY(-2px); box-shadow:var(--shadow-lift)}
+.eng-card .ec-top{display:flex; align-items:flex-start; gap:10px}
+.eng-card h3{font-size:16px; line-height:1.15}
+.eng-card .ec-meta{font-size:12px; color:var(--ink-faint); font-family:var(--mono)}
+.status{font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; padding:3px 8px;
+  border-radius:5px; margin-left:auto; white-space:nowrap; border:1px solid}
+.status.active{background:#EAEEDB; border-color:#C7CE9E; color:var(--good)}
+.status.complete{background:var(--accent-weak); border-color:var(--accent-weak-2); color:var(--accent-deep)}
+.status.planning{background:var(--brass-weak); border-color:#DBC488; color:#6E560F}
+.progress{height:9px; border-radius:5px; background:var(--ground-2); overflow:hidden; box-shadow:inset 0 1px 1px rgba(58,46,30,.14)}
+.progress > span{display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--brass)); border-radius:5px}
+.eng-card .ec-foot{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums}
+.gate{position:relative}
+.gate.locked .eng-grid{filter:blur(5px) saturate(.7); opacity:.5; pointer-events:none; user-select:none}
+.gate-note{display:none; position:absolute; inset:0; place-items:center; text-align:center; z-index:2}
+.gate.locked .gate-note{display:grid}
+.gate-note .card{background:var(--surface); border:1.5px solid var(--line-strong); border-radius:12px; padding:20px 24px;
+  box-shadow:var(--shadow-lift); max-width:400px}
+.gate-note svg{color:var(--accent-deep)} .gate-note h3{font-size:16px; margin:8px 0 5px}
+.gate-note p{font-size:13px; color:var(--ink-soft); margin:0}
+
+/* ── Drag-and-drop builder ──────────────────────────────────────── */
+.build-wrap{display:grid; grid-template-columns:330px 1fr; gap:20px; align-items:start}
+@media(max-width:900px){.build-wrap{grid-template-columns:1fr}}
+.palette{position:sticky; top:96px; align-self:start; background:linear-gradient(180deg,#F8F2E4,#F1E7D1);
+  border:1.5px solid var(--line-strong); border-radius:var(--radius); box-shadow:var(--shadow);
+  max-height:calc(100vh - 120px); overflow:auto}
+.pal-head{position:sticky; top:0; background:var(--surface); border-bottom:1.5px solid var(--line); padding:13px 15px; z-index:2}
+.pal-head .ph-t{font-family:var(--display); font-weight:600; font-size:15px}
+.pal-head .ph-s{font-size:11px; color:var(--ink-faint); margin-top:2px}
+.pal-search{width:100%; margin-top:10px; font-family:var(--sans); font-size:13px; padding:8px 11px;
+  border:1.5px solid var(--line-strong); border-radius:8px; background:var(--surface-2); color:var(--ink)}
+.pal-search:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak)}
+.pal-group{padding:6px 10px 10px}
+.pal-group h4{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-faint); margin:12px 6px 8px; display:flex; align-items:center; gap:8px}
+.pal-group h4 .tc{width:9px; height:9px; border-radius:2px; flex:0 0 auto}
+.pal-piece{display:flex; gap:10px; align-items:flex-start; padding:9px 10px; border-radius:9px; cursor:grab;
+  border:1.5px solid var(--line); background:var(--surface); margin-bottom:6px; transition:.12s; position:relative}
+.pal-piece:hover{border-color:var(--accent-weak-2); transform:translateX(2px)}
+.pal-piece:active{cursor:grabbing}
+.pal-piece.placed{opacity:.45}
+.pal-piece .grip{color:var(--ink-faint); flex:0 0 auto; margin-top:2px}
+.pal-piece .pp-main{min-width:0; flex:1}
+.pal-piece .pp-id{font-family:var(--mono); font-size:10.5px; color:var(--accent-deep); font-weight:600}
+.pal-piece .pp-name{font-size:13px; font-weight:600; line-height:1.2; margin-top:1px}
+.pal-piece .pp-meta{font-size:11px; color:var(--ink-faint); margin-top:2px}
+.pal-piece .add{position:absolute; right:8px; top:8px; width:22px; height:22px; border-radius:6px; border:1px solid var(--line-strong);
+  background:var(--surface-2); color:var(--accent-deep); display:grid; place-items:center; cursor:pointer; opacity:0; transition:.12s}
+.pal-piece:hover .add{opacity:1}
+
+.board-col{min-width:0}
+.summary-bar{display:flex; align-items:center; gap:18px; flex-wrap:wrap; background:var(--surface); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); padding:13px 17px; box-shadow:var(--shadow); margin-bottom:16px; position:sticky; top:96px; z-index:6}
+.summary-bar .sb-stat{display:flex; flex-direction:column}
+.summary-bar .sb-stat .n{font-family:var(--display); font-weight:700; font-size:19px; line-height:1}
+.summary-bar .sb-stat .l{font-family:var(--mono); font-size:9px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-faint); margin-top:2px}
+.summary-bar .sb-prog{flex:1; min-width:120px}
+.summary-bar .sb-prog .pl{display:flex; justify-content:space-between; font-size:11px; color:var(--ink-faint); margin-bottom:5px; font-family:var(--mono)}
+.summary-bar .spacer{margin-left:auto}
+.board{min-height:180px; border-radius:var(--radius); padding:6px; transition:.15s}
+.board.dragover{background:var(--accent-weak); outline:2px dashed var(--accent); outline-offset:-4px}
+.dropzone-empty{border:2px dashed var(--line-strong); border-radius:var(--radius); padding:44px 20px; text-align:center;
+  color:var(--ink-faint); background:repeating-linear-gradient(45deg,transparent 0 10px, rgba(206,189,151,.10) 10px 20px)}
+.dropzone-empty svg{color:var(--line-strong)} .dropzone-empty .t{font-family:var(--display); font-size:16px; color:var(--ink-soft); margin-top:8px}
+.dropzone-empty .s{font-size:13px; margin-top:4px}
+.slot{position:relative; background:linear-gradient(180deg,#F8F2E4,#F1E7D1); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:10px; overflow:hidden}
+.slot.drop-before{box-shadow:0 -3px 0 var(--accent), var(--shadow)}
+.slot.drop-after{box-shadow:0 3px 0 var(--accent), var(--shadow)}
+.slot .stripe{position:absolute; left:0; top:0; bottom:0; width:5px}
+.slot-head{display:flex; gap:13px; align-items:flex-start; padding:13px 14px 13px 20px}
+.slot .snum{font-family:var(--mono); font-weight:600; font-size:13px; width:30px; height:30px; border-radius:50%;
+  background:var(--surface); border:2px solid var(--line-strong); display:grid; place-items:center; flex:0 0 auto; color:var(--ink-soft)}
+.slot.done .snum{background:radial-gradient(circle at 40% 35%,#B4472F,var(--accent-deep)); color:#F6E9CE; border-color:var(--accent-deep)}
+.slot-main{flex:1; min-width:0}
+.slot-main .st-top{display:flex; gap:9px; align-items:center; flex-wrap:wrap}
+.slot-main h3{font-size:15px; margin-top:4px}
+.slot-main .ss{font-size:12.5px; color:var(--ink-soft); margin-top:2px}
+.slot-ctl{display:flex; gap:4px; flex:0 0 auto; align-items:center}
+.slot-ctl button, .drag-handle{width:28px; height:28px; border-radius:7px; border:1px solid var(--line-strong);
+  background:var(--surface-2); color:var(--ink-soft); display:grid; place-items:center; cursor:pointer; transition:.12s}
+.slot-ctl button:hover{border-color:var(--accent); color:var(--accent-deep)}
+.slot-ctl .rm:hover{border-color:var(--crit); color:var(--crit)}
+.drag-handle{cursor:grab; color:var(--ink-faint)}
+.slot.dragging{opacity:.4}
+.slot-body{display:none; padding:0 16px 16px 20px; border-top:1px dashed var(--line)}
+.slot.open .slot-body{display:block; animation:fade .2s ease}
+.slot .chev{transition:transform .2s} .slot.open .chev{transform:rotate(180deg)}
+.pieceflag{font-family:var(--mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase; padding:2px 7px;
+  border-radius:4px; color:#F6E9CE}
+
+/* ── Confirm button ─────────────────────────────────────────────── */
+.btn-confirm{background:linear-gradient(180deg,#6E8A3E,var(--good)); color:#F6F0E1; border-color:#465725;
+  box-shadow:0 8px 18px -10px rgba(94,107,44,.7), inset 0 1px 0 rgba(255,255,255,.25)}
+.btn-confirm:hover{filter:brightness(.94)}
+
+/* ── Execution screen ───────────────────────────────────────────── */
+.exec-prog{background:linear-gradient(180deg,#F8F2E4,#F1E7D1); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); padding:16px 20px; box-shadow:var(--shadow); margin-bottom:18px}
+.exec-prog .ep-top{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:11px}
+.exec-prog .ep-top .big{font-family:var(--display); font-weight:700; font-size:20px}
+.exec-prog .ep-top .sub{font-size:13px; color:var(--ink-faint)}
+.exec-prog .ep-top .pct{margin-left:auto; font-family:var(--display); font-weight:700; font-size:24px; color:var(--accent-deep)}
+.exec-prog .progress{height:11px}
+.exec-wrap{display:grid; grid-template-columns:300px 1fr; gap:20px; align-items:start}
+@media(max-width:920px){.exec-wrap{grid-template-columns:1fr}}
+.exec-rail{position:sticky; top:96px; align-self:start; background:linear-gradient(180deg,#F8F2E4,#F1E7D1);
+  border:1.5px solid var(--line-strong); border-radius:var(--radius); box-shadow:var(--shadow);
+  padding:8px; max-height:calc(100vh - 120px); overflow:auto}
+.ex-step{display:flex; gap:11px; align-items:flex-start; padding:11px 11px; border-radius:9px; cursor:pointer; transition:.12s; position:relative}
+.ex-step:hover{background:var(--surface-2)}
+.ex-step.cur{background:var(--accent-weak)}
+.ex-step .exd{width:26px; height:26px; border-radius:50%; flex:0 0 auto; display:grid; place-items:center;
+  font-family:var(--mono); font-size:12px; border:2px solid var(--line-strong); background:var(--surface); color:var(--ink-soft)}
+.ex-step.cur .exd{border-color:var(--accent)}
+.ex-step.resolved .exd{border-color:var(--good); background:var(--good); color:#F6F0E1}
+.ex-step.resolved.bad .exd{border-color:var(--crit); background:var(--crit)}
+.ex-step .exi{min-width:0; flex:1}
+.ex-step .exi .en{font-size:13.5px; font-weight:600; line-height:1.2}
+.ex-step .exi .em{font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); margin-top:2px; display:flex; gap:7px; align-items:center}
+.ex-step .stripe2{width:4px; align-self:stretch; border-radius:3px; flex:0 0 auto}
+
+.ex-panel{background:linear-gradient(180deg,#F8F2E4,#F1E7D1); border:1.5px solid var(--line-strong);
+  border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden}
+.ex-panel .xp-head{padding:18px 22px; border-bottom:1.5px solid var(--line); display:flex; gap:14px; align-items:flex-start}
+.ex-panel .xp-head .xnum{width:40px; height:40px; border-radius:50%; flex:0 0 auto; display:grid; place-items:center;
+  font-family:var(--mono); font-weight:600; background:var(--surface); border:2.5px solid var(--accent); color:var(--accent-deep)}
+.ex-panel .xp-head h2{font-size:19px; margin-top:4px}
+.ex-panel .xp-head .xh-top{display:flex; gap:9px; align-items:center; flex-wrap:wrap}
+.ex-body{padding:18px 22px 22px}
+.brief{display:grid; gap:16px; grid-template-columns:1fr; margin-bottom:20px}
+@media(min-width:760px){.brief{grid-template-columns:1.3fr 1fr}}
+.doc-form{background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius); padding:16px 18px}
+.doc-form .df-h{font-family:var(--display); font-weight:600; font-size:15px; margin-bottom:14px; display:flex; align-items:center; gap:9px}
+.doc-form .df-h svg{color:var(--accent)}
+.dfield{margin-bottom:15px}
+.dfield > label{font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); display:block; margin-bottom:7px}
+.dfield textarea, .dfield input{width:100%; font-family:var(--sans); font-size:14px; padding:10px 12px;
+  border:1.5px solid var(--line-strong); border-radius:8px; background:var(--surface-2); color:var(--ink); resize:vertical}
+.dfield textarea:focus, .dfield input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak)}
+.oc-choice{display:flex; flex-wrap:wrap; gap:8px}
+.oc-btn{font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; padding:8px 13px;
+  border-radius:8px; border:1.5px solid var(--line-strong); background:var(--surface-2); color:var(--ink-soft); cursor:pointer; transition:.12s}
+.oc-btn:hover{border-color:var(--accent-weak-2)}
+.oc-btn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent-deep); color:#F6F0E1}
+.oc-btn[data-oc="succeeded"][aria-pressed="true"]{background:var(--good); border-color:#465725}
+.oc-btn[data-oc="failed"][aria-pressed="true"],.oc-btn[data-oc="blocked"][aria-pressed="true"]{background:var(--crit); border-color:#5A1A13}
+.oc-btn[data-oc="fell_back"][aria-pressed="true"]{background:var(--warn); border-color:#6E4E10}
+.tagline{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:9px}
+.tagchip{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11.5px; padding:4px 9px;
+  border-radius:6px; background:var(--surface-2); border:1px solid var(--line-strong); color:var(--ink-soft)}
+.tagchip button{border:0; background:none; cursor:pointer; color:var(--ink-faint); display:grid; place-items:center; padding:0}
+.tagchip button:hover{color:var(--crit)}
+.tag-add{display:flex; gap:8px}
+.tag-add input{flex:1}
+.tag-add button{flex:0 0 auto; border:1.5px solid var(--line-strong); background:var(--surface-2); border-radius:8px;
+  padding:0 13px; cursor:pointer; color:var(--accent-deep); font-family:var(--display); font-weight:600}
+.stamp-row{display:flex; gap:10px; flex-wrap:wrap}
+.stamp{flex:1; min-width:130px; border:1.5px solid var(--line-strong); border-radius:8px; background:var(--surface-2); padding:9px 11px}
+.stamp .sl{font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
+.stamp .sv{font-size:13px; margin-top:3px; display:flex; align-items:center; gap:8px}
+.stamp button{border:1px solid var(--line-strong); background:var(--surface); border-radius:6px; padding:3px 9px; font-size:11px; cursor:pointer; color:var(--accent-deep); font-family:var(--mono)}
+.exec-nav{display:flex; gap:12px; align-items:center; margin-top:20px; padding-top:16px; border-top:1px dashed var(--line-strong)}
+.exec-nav .spacer{margin-left:auto}
+
+@media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important}}
+</style>
+
+<div class="map-bg" aria-hidden="true">
+  <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#8a6a3a" stroke-opacity="0.16" stroke-width="1.2">
+    <path d="M-20 210 C 220 150 420 250 640 200 S 1020 120 1240 190"/>
+    <path d="M-20 250 C 220 195 430 295 650 245 S 1020 165 1240 235"/>
+    <path d="M-20 560 C 260 500 460 610 700 560 S 1040 500 1240 560"/>
+    <path d="M-20 600 C 260 545 470 650 710 600 S 1040 545 1240 600"/>
+    <circle cx="880" cy="360" r="120"/><circle cx="880" cy="360" r="170"/><circle cx="880" cy="360" r="220"/>
+    <path d="M250 700 L 360 560 L 470 610 L 560 470"/>
+  </svg>
+</div>
+<div class="stains" aria-hidden="true"></div>
+
+<div class="app">
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-in">
+        <div class="brand" id="homeBtn" role="button" tabindex="0" title="Home">
+          <svg class="compass" viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="24" cy="24" r="21" fill="#F6F0E1" stroke="#B7A277" stroke-width="1.5"/>
+            <circle cx="24" cy="24" r="15" fill="none" stroke="#CEBD97" stroke-width="1"/>
+            <path d="M24 5 L28 24 L24 43 L20 24 Z" fill="#9C3B2E"/>
+            <path d="M24 5 L20 24 L24 24 Z" fill="#7C2A20"/>
+            <path d="M5 24 L24 20 L43 24 L24 28 Z" fill="#3C5A6B" opacity="0.85"/>
+            <circle cx="24" cy="24" r="2.4" fill="#A9822C"/>
+            <text x="24" y="12" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="5.5" fill="#7C2A20" font-weight="600">N</text>
+          </svg>
+          <div class="wm">Siege Tower<small>Engagement Planner</small></div>
+        </div>
+
+        <nav class="stepper" aria-label="Planning stages">
+          <button class="step" data-goto="intake" aria-current="true">
+            <span class="idx">1</span><span><span class="st">Scope</span><span class="sd">ROE &amp; objective</span></span></button>
+          <button class="step" data-goto="plans" id="stepPlans" disabled>
+            <span class="idx">2</span><span><span class="st">Plan</span><span class="sd">Ranked approaches</span></span></button>
+          <button class="step" data-goto="build" id="stepBuild" disabled>
+            <span class="idx">3</span><span><span class="st">Build</span><span class="sd">Drag &amp; arrange</span></span></button>
+          <button class="step" data-goto="execute" id="stepExecute" disabled>
+            <span class="idx">4</span><span><span class="st">Execute</span><span class="sd">Run &amp; document</span></span></button>
+        </nav>
+
+        <div class="eng-block">
+          <div class="eng-title" id="tbTitle">New engagement</div>
+          <div class="eng-sub" id="tbSub">Draft · not yet generated</div>
+          <div class="roe-chips" id="tbChips"></div>
+          <span id="railTech" hidden></span>
+        </div>
+      </div>
+      <div class="hprog" id="hprog" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    </header>
+
+    <!-- STAGE 0 — HOME / LAUNCH -->
+    <section class="stage" id="stage-home">
+      <div class="hero">
+        <div class="eyebrow">Authorized red-team engagement planner</div>
+        <h1>Plan the engagement like a campaign.</h1>
+        <p>Lay out the Rules of Engagement, let Siege Tower recommend ATT&amp;CK-mapped approaches,
+           then drag the pieces into your own line of march — as long or short as the objective needs.
+           It plans and documents. It never runs anything.</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary btn-lg" id="newEngBtn">
+            Plan a new engagement
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-lg" id="scratchHomeBtn">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v7M14 17.5h7"/></svg>
+            Build from the library
+          </button>
+        </div>
+        <div class="hero-stats">
+          <div class="hstat"><div class="n tnum" id="heroTech">49</div><div class="l">ATT&amp;CK techniques</div></div>
+          <div class="hstat"><div class="n tnum">6</div><div class="l">Objectives</div></div>
+          <div class="hstat"><div class="n">MITRE</div><div class="l">Sourced &amp; updatable</div></div>
+          <div class="hstat"><div class="n">0</div><div class="l">Commands it can run</div></div>
+        </div>
+      </div>
+
+      <div class="history">
+        <div class="history-head">
+          <h2>Previous engagements</h2>
+          <span class="sub">Review past campaigns and their progress</span>
+          <button class="switch" id="histToggle" aria-pressed="false">
+            <span>Client authorized data retention</span><span class="track"></span>
+          </button>
+        </div>
+        <div class="gate locked" id="histGate">
+          <div class="gate-note"><div class="card">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+            <h3>Engagement history is locked</h3>
+            <p>Past-engagement data is shown only when the client has authorized its retention in the ROE. Toggle the switch above once that authorization is on file.</p>
+          </div></div>
+          <div class="eng-grid" id="histList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STAGE 1 — INTAKE -->
+    <section class="stage hidden" id="stage-intake">
+      <div class="stage-head">
+        <div class="eyebrow">Rules of engagement · lay out the board</div>
+        <h1>Scope the engagement</h1>
+        <p>Set out what the client authorized, like pieces on a map. Siege Tower turns it into a
+           small set of ranked, ATT&amp;CK-mapped plans — then documents what your team actually does.</p>
+      </div>
+
+      <div class="field-row">
+        <div class="field"><label for="fName">Engagement name</label>
+          <input id="fName" value="ACME Corp — external red team" autocomplete="off"></div>
+        <div class="field"><label for="fClient">Client</label>
+          <input id="fClient" value="ACME Corporation" autocomplete="off"></div>
+        <div class="field"><label for="fAuth">Authorization reference</label>
+          <input id="fAuth" value="SOW-2026-014" autocomplete="off"></div>
+      </div>
+
+      <div class="section">
+        <div class="lbl"><h2>Objective</h2><span class="hint">The end-state the engagement must demonstrate</span></div>
+        <div class="tiles obj" id="objTiles"></div>
+      </div>
+      <div class="section">
+        <div class="lbl"><h2>Box type</h2><span class="hint">How much the client tells you up front</span></div>
+        <div class="tiles box" id="boxTiles"></div>
+      </div>
+      <div class="section">
+        <div class="lbl"><h2>In-scope platforms</h2><span class="hint">Systems in play — plans are filtered to these</span></div>
+        <div class="chipset" id="platChips"></div>
+      </div>
+      <div class="section">
+        <div class="lbl"><h2>Restrictions</h2><span class="hint">ROE limits Siege Tower must honor</span></div>
+        <div class="chipset" id="restChips"></div>
+      </div>
+
+      <div class="field-row section">
+        <div class="field"><label for="fBudget">Time budget (hours)</label>
+          <input id="fBudget" type="number" value="40" min="1"></div>
+        <div class="field"><label for="fAdv">Emulate adversary (optional)</label>
+          <input id="fAdv" placeholder="e.g. APT29" autocomplete="off"></div>
+        <div class="field"><label for="fTargets">In-scope targets</label>
+          <input id="fTargets" value="10.0.0.0/24, acme.example" autocomplete="off"></div>
+      </div>
+
+      <div class="actionbar">
+        <span class="note" id="intakeNote"></span>
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="genBtn">
+          Generate plans
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- STAGE 2 — PLANS -->
+    <section class="stage hidden" id="stage-plans">
+      <div class="stage-head">
+        <div class="eyebrow" id="plansEyebrow">Order of battle · ranked approaches</div>
+        <h1 id="plansTitle">Choose a plan</h1>
+        <p id="plansLead"></p>
+      </div>
+      <div class="plangrid" id="planGrid"></div>
+      <div class="actionbar">
+        <button class="btn btn-ghost" data-goto="intake">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+          Back to scope</button>
+        <span class="note" id="plansNote"></span>
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="scratchBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v7M14 17.5h7"/></svg>
+          Build your own instead</button>
+      </div>
+    </section>
+
+    <!-- STAGE 3 — BUILD (drag & drop) -->
+    <section class="stage hidden" id="stage-build">
+      <div class="stage-head" style="margin-bottom:18px">
+        <div class="eyebrow" id="buildEyebrow">Line of march · drag pieces onto the board</div>
+        <h1 id="buildTitle">Build the attack plan</h1>
+        <p>Grab a piece from the library and place it on the board — recon, then enumeration, then
+           access, and so on. Reorder freely, trim what you don't need, and document each move as you go.</p>
+      </div>
+
+      <div class="build-wrap">
+        <aside class="palette" id="palette" aria-label="Technique library">
+          <div class="pal-head">
+            <div class="ph-t">Technique library</div>
+            <div class="ph-s">MITRE ATT&amp;CK · updated as the field advances</div>
+            <input class="pal-search" id="palSearch" placeholder="Search techniques, tactics, tools…" autocomplete="off">
+          </div>
+          <div id="palList"></div>
+        </aside>
+
+        <div class="board-col">
+          <div class="summary-bar">
+            <div class="sb-stat"><span class="n tnum" id="sbSteps">0</span><span class="l">Steps</span></div>
+            <div class="sb-stat"><span class="n tnum" id="sbTime">0h</span><span class="l">Est. time</span></div>
+            <div class="sb-stat"><span class="n tnum" id="sbTactics">0</span><span class="l">Tactics</span></div>
+            <span class="spacer"></span>
+            <button class="btn btn-confirm" id="confirmBtn" disabled>
+              Confirm plan &amp; begin
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>
+            </button>
+          </div>
+          <div class="board" id="board"></div>
+        </div>
+      </div>
+
+      <div class="actionbar">
+        <button class="btn btn-ghost" data-goto="plans">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+          Recommended plans</button>
+        <span class="note" id="buildNote"></span>
+      </div>
+    </section>
+
+    <!-- STAGE 4 — EXECUTE (run & document) -->
+    <section class="stage hidden" id="stage-execute">
+      <div class="stage-head" style="margin-bottom:16px">
+        <div class="eyebrow">Engagement underway · document each move</div>
+        <h1 id="execTitle">Execute the plan</h1>
+      </div>
+      <div class="exec-prog">
+        <div class="ep-top">
+          <span class="big" id="execStepLbl">Step 1 of 1</span>
+          <span class="sub" id="execSub">Walk the line of march and record what happens at each step.</span>
+          <span class="pct tnum" id="execPct">0%</span>
+        </div>
+        <div class="progress"><span id="execProgBar" style="width:0%"></span></div>
+      </div>
+      <div class="exec-wrap">
+        <aside class="exec-rail" id="execRail" aria-label="Steps"></aside>
+        <div class="ex-panel" id="execPanel"></div>
+      </div>
+      <div class="actionbar">
+        <button class="btn btn-ghost" data-goto="build">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+          Edit plan</button>
+        <span class="spacer"></span>
+        <span class="note" id="execNote"></span>
+        <button class="btn btn-ghost" id="saveBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+          Save</button>
+        <button class="btn btn-primary" id="reportBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3h8l4 4v14H4V3z"/><path d="M8 12h8M8 16h5"/></svg>
+          Field report</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="repHeading">
+    <div class="modal-head">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9C3B2E" stroke-width="2"><path d="M8 3h8l4 4v14H4V3z"/><path d="M8 12h8M8 16h5"/></svg>
+      <h2 id="repHeading">Field report</h2>
+      <button class="x" id="repClose" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="report" id="reportBody"></div>
+  </div>
+</div>
+<script>
+let SIEGE = {};  // populated from /api/bootstrap at boot
+
+/* ── Static metadata ──────────────────────────────────────────── */
+const OBJ_ICONS = {
+  initial_foothold:'M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z',
+  domain_admin:'M12 2l7 4v6c0 4-3 7.5-7 10-4-2.5-7-6-7-10V6z',
+  data_exfiltration:'M4 7h16M4 12h10M4 17h7M20 14l-4 4 4 4M22 18h-8',
+  ransomware_simulation:'M5 11h14v10H5zM8 11V8a4 4 0 018 0v3M12 15v3',
+  cloud_takeover:'M6 16a4 4 0 010-8 6 6 0 0111-2 4 4 0 011 8H6zM12 12v4M10 14h4',
+  email_compromise:'M3 6h18v12H3zM3 6l9 7 9-7',
+};
+const OBJ_DESC = {
+  initial_foothold:'First code execution on a host inside scope.',
+  domain_admin:'Domain-wide privileged control of Active Directory.',
+  data_exfiltration:'Demonstrate exfiltration of sensitive data.',
+  ransomware_simulation:'Show impact reach with reversible, signed-off actions.',
+  cloud_takeover:'Tenant / cloud administrator control.',
+  email_compromise:'Access to target mailboxes and messaging.',
+};
+const BOX_DESC = {
+  black:'No prior knowledge. Start from the public edge.',
+  grey:'Partial knowledge — usually a low-privilege foothold.',
+  white:'Full knowledge, source, and standing access.',
+};
+const TACTIC_LABEL = {
+  'reconnaissance':'Reconnaissance','resource-development':'Resource Dev','initial-access':'Initial Access',
+  'execution':'Execution','persistence':'Persistence','privilege-escalation':'Privilege Escalation',
+  'defense-evasion':'Defense Evasion','credential-access':'Credential Access','discovery':'Discovery',
+  'lateral-movement':'Lateral Movement','collection':'Collection','command-and-control':'C2',
+  'exfiltration':'Exfiltration','impact':'Impact',
+};
+const TACTIC_COLOR = {
+  'reconnaissance':'#6B7F8C','initial-access':'#9C3B2E','execution':'#A9822C','persistence':'#7A6A9C',
+  'privilege-escalation':'#B06A2E','defense-evasion':'#7C6A55','credential-access':'#4E7C6B',
+  'discovery':'#3C5A6B','lateral-movement':'#8A6D3B','collection':'#5E6B2C',
+  'command-and-control':'#6B5B41','exfiltration':'#97362A','impact':'#5A3A3A',
+};
+const OUTCOMES = ['attempted','succeeded','fell_back','failed','blocked','skipped'];
+const OUTCOME_LABEL = {attempted:'Attempted',succeeded:'Succeeded',fell_back:'Fell back',
+  failed:'Failed',blocked:'Blocked',skipped:'Skipped',not_started:'Not started'};
+
+
+/* ── State ────────────────────────────────────────────────────── */
+const state = {
+  view:'home', authorized:false,
+  objective:'domain_admin', box:'grey',
+  platforms:new Set(['windows','active_directory']), restrictions:new Set(),
+  plan:[], logs:{}, open:new Set(), seededFrom:null, palFilter:'', engagementId:null, status:'active',
+};
+let _uid = 1; const uid = () => 's' + (_uid++);
+const PB = {}; (SIEGE.playbook||[]).forEach(p => PB[p.technique_id] = p);
+
+/* Per-step documentation records. logs[uid] = {outcome, operator, notes, evidence[], targets[], startedAt, completedAt} */
+const RESOLVED = new Set(['succeeded','fell_back','failed','blocked','skipped']);
+const BAD = new Set(['failed','blocked']);
+function ensureLog(u){ if(!state.logs[u]) state.logs[u]={outcome:undefined,operator:'',notes:'',evidence:[],targets:[],startedAt:null,completedAt:null}; return state.logs[u]; }
+function outcomeOf(u){ return state.logs[u] ? state.logs[u].outcome : undefined; }
+function nowStamp(){ return new Date().toISOString().slice(0,16).replace('T',' '); }
+
+const $ = s => document.querySelector(s);
+const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
+const svg = p => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${p}"/></svg>`;
+const titleCase = s => (s||'').replace(/[_-]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const currentResult = () => SIEGE.results[`${state.objective}|${state.box}`];
+
+/* ── Intake ───────────────────────────────────────────────────── */
+function buildIntake(){
+  const ot=$('#objTiles'); ot.innerHTML='';
+  SIEGE.reference.objectives.forEach(o=>{
+    const t=el('button','tile'); t.setAttribute('aria-pressed',o.value===state.objective); t.dataset.v=o.value;
+    t.innerHTML=`<span class="tick">${svg('M20 6L9 17l-5-5')}</span>
+      <div class="ti"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="${OBJ_ICONS[o.value]||''}"/></svg></span><h3>${o.label}</h3></div>
+      <p>${OBJ_DESC[o.value]||''}</p>`;
+    t.onclick=()=>{state.objective=o.value; [...ot.children].forEach(c=>c.setAttribute('aria-pressed',c.dataset.v===o.value)); syncChips();};
+    ot.appendChild(t);
+  });
+  const bt=$('#boxTiles'); bt.innerHTML='';
+  SIEGE.reference.box_types.forEach(b=>{
+    const t=el('button','tile'); t.setAttribute('aria-pressed',b.value===state.box); t.dataset.v=b.value;
+    t.innerHTML=`<span class="tick">${svg('M20 6L9 17l-5-5')}</span><span class="box-k">${b.value}-box</span><h3>${b.label}</h3><p>${BOX_DESC[b.value]||''}</p>`;
+    t.onclick=()=>{state.box=b.value; [...bt.children].forEach(c=>c.setAttribute('aria-pressed',c.dataset.v===b.value)); syncChips();};
+    bt.appendChild(t);
+  });
+  const pc=$('#platChips'); pc.innerHTML='';
+  SIEGE.reference.platforms.forEach(p=>{
+    const c=el('button','mchip'); c.setAttribute('aria-pressed',state.platforms.has(p.value));
+    c.innerHTML=`<span class="dot"></span>${p.label}`;
+    c.onclick=()=>{state.platforms.has(p.value)?state.platforms.delete(p.value):state.platforms.add(p.value); c.setAttribute('aria-pressed',state.platforms.has(p.value)); syncChips();};
+    pc.appendChild(c);
+  });
+  const rc=$('#restChips'); rc.innerHTML='';
+  SIEGE.reference.restrictions.forEach(r=>{
+    const c=el('button','mchip'); c.setAttribute('aria-pressed',state.restrictions.has(r.value));
+    c.innerHTML=`<span class="dot"></span>${r.label}`;
+    c.onclick=()=>{state.restrictions.has(r.value)?state.restrictions.delete(r.value):state.restrictions.add(r.value); c.setAttribute('aria-pressed',state.restrictions.has(r.value)); syncChips();};
+    rc.appendChild(c);
+  });
+  $('#railTech').textContent=SIEGE.playbook_stats.total; $('#heroTech').textContent=SIEGE.playbook_stats.total;
+}
+function syncChips(){
+  $('#tbTitle').textContent=$('#fName').value||'New engagement';
+  $('#tbSub').textContent=`${titleCase(state.objective)} · ${titleCase(state.box)}-box`;
+  const chips=$('#tbChips'); chips.innerHTML='';
+  chips.appendChild(el('span','chip accent',`<span class="k">Objective</span>${titleCase(state.objective)}`));
+  chips.appendChild(el('span','chip',`<span class="k">Box</span>${titleCase(state.box)}`));
+  if(state.platforms.size) chips.appendChild(el('span','chip',`<span class="k">Scope</span>${state.platforms.size} platform${state.platforms.size>1?'s':''}`));
+}
+
+/* ── Recommended plans ────────────────────────────────────────── */
+function segMeter(val,max,cls){let h=`<div class="seg ${cls||''}">`;for(let i=1;i<=max;i++)h+=`<i class="${i<=Math.round(val)?'on':''}"></i>`;return h+'</div>';}
+function buildPlans(){
+  const res=currentResult(); $('#stepPlans').disabled=false; $('#stepBuild').disabled=false;
+  const objLabel=titleCase(state.objective);
+  $('#plansLead').textContent=res.options.length
+    ? `${res.options.length} legal approaches reach ${objLabel.toLowerCase()} from a ${state.box}-box start, ranked by fit to your ROE. Open one in the builder to customize it, or build your own from the library.`
+    : `No legal path reaches ${objLabel.toLowerCase()} under these constraints.`;
+  $('#plansNote').textContent=res.excluded_count?`${res.excluded_count} techniques excluded by your ROE.`:'';
+  $('#tbSub').textContent=`${objLabel} · ${titleCase(state.box)}-box · ${res.options.length} plan${res.options.length!==1?'s':''}`;
+  const grid=$('#planGrid'); grid.innerHTML='';
+  const budget=parseFloat($('#fBudget').value)||null;
+  res.options.forEach((o,i)=>{
+    const hrs=o.est_total_minutes/60, over=budget&&hrs>budget;
+    const card=el('div','plan');
+    const tacts=o.covered_tactics.map(t=>`<span class="tact">${TACTIC_LABEL[t]||t}</span>`).join('');
+    const bpct=budget?Math.min(100,hrs/budget*100):Math.min(100,hrs/48*100);
+    card.innerHTML=`
+      <div class="plan-top"><div class="medal" style="--p:${o.fit_score}"><span class="v tnum">${Math.round(o.fit_score)}</span></div>
+        <div><div class="rank">Rank ${i+1} · fit ${o.fit_score}</div><h3>${o.title}</h3></div></div>
+      <div class="tacts">${tacts}</div>
+      <p class="why">${o.rationale[0]||''}</p>
+      <div class="meters">
+        <div class="meter"><span class="ml">Time</span><div class="bar ${over?'over':''}"><span style="width:${bpct}%"></span></div><span class="mv">${hrs.toFixed(1)}h${budget?` / ${budget}`:''}</span></div>
+        <div class="meter"><span class="ml">Stealth</span>${segMeter(6-o.aggregate_noise,5,'')}<span class="mv">noise ${o.aggregate_noise.toFixed(1)}</span></div>
+        <div class="meter"><span class="ml">Difficulty</span>${segMeter(o.max_difficulty,5,o.max_difficulty>=4?'crit':(o.max_difficulty>=3?'warn':''))}<span class="mv">${o.max_difficulty}/5</span></div>
+      </div>
+      <div class="plan-foot"><span class="steps">${o.steps.length} steps · ${o.covered_tactics.length} tactics</span>
+        <span class="go">Open in builder ${svg('M5 12h14M13 6l6 6-6 6')}</span></div>`;
+    card.onclick=()=>openBuilderFromOption(o);
+    grid.appendChild(card);
+  });
+}
+
+/* ── Builder ──────────────────────────────────────────────────── */
+function openBuilderFromOption(o){
+  state.engagementId=null; state.plan=o.steps.map(s=>({uid:uid(),tid:s.technique_id}));
+  state.logs={}; state.open=new Set(state.plan.length?[state.plan[0].uid]:[]); state.seededFrom=o.title;
+  enterBuild(`Seeded from “${o.title}” — rearrange, add, or trim as you see fit.`);
+}
+function openBuilderScratch(){
+  state.engagementId=null; state.plan=[]; state.logs={}; state.open=new Set(); state.seededFrom=null;
+  enterBuild('Empty board — drag pieces from the library to build your line of march.');
+}
+function enterBuild(note){
+  $('#stepPlans').disabled=false; $('#stepBuild').disabled=false;
+  $('#buildNote').textContent=note||''; state.palFilter='';
+  const s=$('#palSearch'); if(s) s.value='';
+  renderPalette(); renderBoard(); updateSummary(); go('build');
+}
+function pieceIn(tid){return state.plan.some(x=>x.tid===tid);}
+
+function renderPalette(){
+  const list=$('#palList'); list.innerHTML=''; const f=state.palFilter.toLowerCase();
+  (SIEGE.tactic_order||[]).forEach(tac=>{
+    const pieces=SIEGE.playbook.filter(p=>p.tactic===tac).filter(p=>{
+      if(!f) return true;
+      return (p.technique_id+' '+p.name+' '+TACTIC_LABEL[p.tactic]+' '+(p.recommended_tools||[]).join(' ')).toLowerCase().includes(f);
+    });
+    if(!pieces.length) return;
+    const g=el('div','pal-group'); g.innerHTML=`<h4><span class="tc" style="background:${TACTIC_COLOR[tac]}"></span>${TACTIC_LABEL[tac]||tac} · ${pieces.length}</h4>`;
+    pieces.forEach(p=>{
+      const pc=el('div','pal-piece'+(pieceIn(p.technique_id)?' placed':'')); pc.draggable=true; pc.dataset.tid=p.technique_id;
+      pc.innerHTML=`<span class="grip">${svg('M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01')}</span>
+        <div class="pp-main"><div class="pp-id">${p.technique_id}</div><div class="pp-name">${p.name}</div>
+        <div class="pp-meta">${(p.recommended_tools||[]).slice(0,2).join(', ')||'—'} · ${Math.round(p.est_minutes)}m</div></div>
+        <button class="add" title="Add to plan" aria-label="Add ${p.name}">${svg('M12 5v14M5 12h14')}</button>`;
+      pc.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','palette:'+p.technique_id); e.dataTransfer.effectAllowed='copy';});
+      pc.querySelector('.add').onclick=e=>{e.stopPropagation(); addPiece(p.technique_id);};
+      pc.onclick=()=>addPiece(p.technique_id);
+      g.appendChild(pc);
+    });
+    list.appendChild(g);
+  });
+  if(!list.children.length) list.innerHTML='<div class="pal-group"><p style="color:var(--ink-faint);font-size:13px;padding:10px 6px">No techniques match your search.</p></div>';
+}
+
+function renderBoard(){
+  const board=$('#board'); board.innerHTML='';
+  if(!state.plan.length){
+    board.innerHTML=`<div class="dropzone-empty">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v18M3 12h18" stroke-dasharray="2 2"/><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+      <div class="t">Lay out your line of march</div>
+      <div class="s">Drag pieces from the library, or click a piece to place it here.</div></div>`;
+    return;
+  }
+  state.plan.forEach((slot,i)=>board.appendChild(slotEl(slot,i)));
+}
+function slotEl(slot,i){
+  const p=PB[slot.tid]; const open=state.open.has(slot.uid);
+  const node=el('div','slot'+(open?' open':'')); node.dataset.uid=slot.uid;
+  const col=TACTIC_COLOR[p.tactic]||'#8A6D3B';
+  const tools=(p.recommended_tools||[]).map(t=>`<span class="toolchip">${t}</span>`).join('')||'—';
+  const acts=(p.steps||[]).map((a,ix)=>`<li><span class="an tnum">${ix+1}</span><div><div class="at">${a.action}</div><div class="ax">→ ${a.expected_result}</div></div></li>`).join('');
+  const fbs=(p.fallback_technique_ids||[]).map(f=>`<span class="fb">${f}</span>`).join('')||'—';
+  const gains=(p.provides||[]).map(g=>`<span class="pill good">${svg('M20 6L9 17l-5-5')}${g}</span>`).join('')||'—';
+  node.innerHTML=`
+    <span class="stripe" style="background:${col}"></span>
+    <div class="slot-head">
+      <span class="snum tnum">${i+1}</span>
+      <div class="slot-main">
+        <div class="st-top"><span class="tid">${p.technique_id}</span>
+          <span class="pieceflag" style="background:${col}">${TACTIC_LABEL[p.tactic]||p.tactic}</span></div>
+        <h3>${p.name}</h3><div class="ss">${p.summary}</div>
+      </div>
+      <div class="slot-ctl">
+        <button class="drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">${svg('M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01')}</button>
+        <button class="mv-up" title="Move up" aria-label="Move up">${svg('M18 15l-6-6-6 6')}</button>
+        <button class="mv-dn" title="Move down" aria-label="Move down">${svg('M6 9l6 6 6-6')}</button>
+        <button class="rm" title="Remove" aria-label="Remove">${svg('M6 6l12 12M18 6L6 18')}</button>
+        <button class="exp" title="Details" aria-label="Toggle details"><span class="chev">${svg('M6 9l6 6 6-6')}</span></button>
+      </div>
+    </div>
+    <div class="slot-body">
+      <div class="nb-grid">
+        <div>
+          <div class="nb-block"><div class="bh">Objective</div><div class="rv" style="font-size:13.5px;color:var(--ink-soft)">${p.objective||'—'}</div></div>
+          <div class="nb-block" style="margin-top:16px"><div class="bh">Actions</div><ul class="actions-list">${acts}</ul></div>
+        </div>
+        <div class="kv">
+          <div class="nb-block"><div class="bh">Suggested tools</div><div class="toolchips">${tools}</div></div>
+          <div class="row"><div class="rk">Prerequisite</div><div class="rv">${p.prerequisite_note||'—'}</div></div>
+          <div class="row"><div class="rk">Success indicator</div><div class="rv">${p.success_indicator||'—'}</div></div>
+          <div class="row"><div class="rk">If it fails, fall back to</div><div class="fallbacks">${fbs}</div></div>
+          <div class="row"><div class="rk">Blue-team detection</div><div class="rv">${p.detection||'—'}</div></div>
+          <div class="row"><div class="rk">Gains</div><div class="toolchips">${gains}</div></div>
+        </div>
+      </div>
+    </div>`;
+  node.querySelector('.exp').onclick=()=>{open?state.open.delete(slot.uid):state.open.add(slot.uid); node.classList.toggle('open');};
+  node.querySelector('.rm').onclick=()=>removeSlot(slot.uid);
+  node.querySelector('.mv-up').onclick=()=>moveSlot(slot.uid,-1);
+  node.querySelector('.mv-dn').onclick=()=>moveSlot(slot.uid,1);
+  const h=node.querySelector('.drag-handle');
+  h.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','track:'+slot.uid); e.dataTransfer.effectAllowed='move'; node.classList.add('dragging');});
+  h.addEventListener('dragend',()=>node.classList.remove('dragging'));
+  return node;
+}
+function addPiece(tid){ state.plan.push({uid:uid(),tid}); afterPlanChange(); }
+function insertPiece(tid,idx){ state.plan.splice(idx,0,{uid:uid(),tid}); afterPlanChange(); }
+function removeSlot(u){ state.plan=state.plan.filter(s=>s.uid!==u); delete state.logs[u]; state.open.delete(u); afterPlanChange(); }
+function moveSlot(u,dir){ const i=state.plan.findIndex(s=>s.uid===u); const j=i+dir; if(j<0||j>=state.plan.length) return;
+  [state.plan[i],state.plan[j]]=[state.plan[j],state.plan[i]]; afterPlanChange(); }
+function moveTo(u,idx){ const i=state.plan.findIndex(s=>s.uid===u); if(i<0) return; const [it]=state.plan.splice(i,1);
+  if(idx>i) idx--; state.plan.splice(Math.max(0,Math.min(idx,state.plan.length)),0,it); afterPlanChange(); }
+function afterPlanChange(){ renderBoard(); renderPalette(); updateSummary(); }
+function updateSummary(){
+  const n=state.plan.length;
+  const mins=state.plan.reduce((a,s)=>a+(PB[s.tid]?PB[s.tid].est_minutes:0),0);
+  const tacts=new Set(state.plan.map(s=>PB[s.tid]&&PB[s.tid].tactic)); tacts.delete(undefined);
+  $('#sbSteps').textContent=n; $('#sbTime').textContent=(mins/60).toFixed(1)+'h'; $('#sbTactics').textContent=tacts.size;
+  const cb=$('#confirmBtn'); if(cb) cb.disabled = n===0;
+}
+
+/* ── Execution screen (run & document) ────────────────────────── */
+function confirmPlan(){
+  if(!state.plan.length) return;
+  state.confirmed=true; $('#stepExecute').disabled=false;
+  let i=state.plan.findIndex(s=>!RESOLVED.has(outcomeOf(s.uid)));
+  state.execIndex = i<0 ? 0 : i;
+  renderExecute(); go('execute');
+}
+function renderExecute(){
+  $('#execTitle').textContent = ($('#fName').value||'Execute the plan');
+  renderExecRail(); renderExecPanel(); updateExecProgress();
+}
+function updateExecProgress(){
+  const n=state.plan.length, done=state.plan.filter(s=>RESOLVED.has(outcomeOf(s.uid))).length;
+  const pct=n?Math.round(100*done/n):0;
+  $('#execPct').textContent=pct+'%'; $('#execProgBar').style.width=pct+'%';
+  $('#execStepLbl').textContent=`Step ${Math.min(state.execIndex+1,n)} of ${n}`;
+  $('#execSub').textContent=`${done} of ${n} steps resolved`;
+}
+function renderExecRail(){
+  const rail=$('#execRail'); rail.innerHTML='';
+  state.plan.forEach((s,i)=>{
+    const p=PB[s.tid], oc=outcomeOf(s.uid), res=RESOLVED.has(oc);
+    const r=el('div','ex-step'+(i===state.execIndex?' cur':'')+(res?' resolved':'')+(BAD.has(oc)?' bad':''));
+    r.innerHTML=`<span class="stripe2" style="background:${TACTIC_COLOR[p.tactic]||'#8A6D3B'}"></span>
+      <span class="exd tnum">${res?(BAD.has(oc)?'✕':'✓'):(i+1)}</span>
+      <span class="exi"><span class="en">${p.name}</span>
+      <span class="em"><span>${p.technique_id}</span><span>· ${oc?OUTCOME_LABEL[oc]:'pending'}</span></span></span>`;
+    r.onclick=()=>{ state.execIndex=i; renderExecute(); };
+    rail.appendChild(r);
+  });
+}
+function renderExecPanel(){
+  const panel=$('#execPanel'), n=state.plan.length;
+  if(!n){ panel.innerHTML='<div class="ex-body"><p style="color:var(--ink-faint)">No steps in the plan. Go back to the builder and add pieces.</p></div>'; return; }
+  const slot=state.plan[state.execIndex], p=PB[slot.tid], l=ensureLog(slot.uid), col=TACTIC_COLOR[p.tactic]||'#8A6D3B';
+  const tools=(p.recommended_tools||[]).map(t=>`<span class="toolchip">${t}</span>`).join('')||'—';
+  const acts=(p.steps||[]).map((a,ix)=>`<li><span class="an tnum">${ix+1}</span><div><div class="at">${a.action}</div><div class="ax">→ ${a.expected_result}</div></div></li>`).join('');
+  const fbs=(p.fallback_technique_ids||[]).map(f=>`<span class="fb">${f}</span>`).join('')||'—';
+  const ev=l.evidence.map((x,ix)=>`<span class="tagchip">${esc(x)}<button data-ev="${ix}" aria-label="Remove">${svg('M6 6l12 12M18 6L6 18')}</button></span>`).join('');
+  const tg=l.targets.map((x,ix)=>`<span class="tagchip">${esc(x)}<button data-tg="${ix}" aria-label="Remove">${svg('M6 6l12 12M18 6L6 18')}</button></span>`).join('');
+  panel.innerHTML=`
+    <div class="xp-head"><span class="xnum tnum" style="border-color:${col};color:${col}">${state.execIndex+1}</span>
+      <div><div class="xh-top"><span class="tid">${p.technique_id}</span><span class="pieceflag" style="background:${col}">${TACTIC_LABEL[p.tactic]||p.tactic}</span></div>
+      <h2>${p.name}</h2></div></div>
+    <div class="ex-body">
+      <div class="brief">
+        <div>
+          <div class="nb-block"><div class="bh">Objective</div><div class="rv" style="font-size:13.5px;color:var(--ink-soft)">${p.objective||'—'}</div></div>
+          <div class="nb-block" style="margin-top:15px"><div class="bh">Actions</div><ul class="actions-list">${acts}</ul></div>
+          <div class="nb-block" style="margin-top:15px"><div class="bh">Success indicator</div><div class="rv" style="font-size:13px;color:var(--ink-soft)">${p.success_indicator||'—'}</div></div>
+        </div>
+        <div class="kv">
+          <div class="nb-block"><div class="bh">Suggested tools</div><div class="toolchips">${tools}</div></div>
+          <div class="row"><div class="rk">If it fails, fall back to</div><div class="fallbacks">${fbs}</div></div>
+          <div class="row"><div class="rk">Blue-team detection</div><div class="rv">${p.detection||'—'}</div></div>
+        </div>
+      </div>
+      <div class="doc-form">
+        <div class="df-h">${svg('M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z')} Document this step</div>
+        <div class="dfield"><label>Outcome</label>
+          <div class="oc-choice">${OUTCOMES.map(o=>`<button class="oc-btn" data-oc="${o}" aria-pressed="${l.outcome===o}">${OUTCOME_LABEL[o]}</button>`).join('')}</div></div>
+        <div class="stamp-row dfield">
+          <div class="stamp"><div class="sl">Started</div><div class="sv"><span id="tsStart">${l.startedAt||'—'}</span><button id="btnStart" type="button">stamp now</button></div></div>
+          <div class="stamp"><div class="sl">Completed</div><div class="sv"><span id="tsDone">${l.completedAt||'—'}</span><button id="btnDone" type="button">stamp now</button></div></div>
+        </div>
+        <div class="dfield"><label>Operator</label><input id="dOperator" value="${esc(l.operator)}" placeholder="Who ran this step" autocomplete="off"></div>
+        <div class="dfield"><label>Notes — what happened</label><textarea id="dNotes" rows="3" placeholder="Observations, what worked, deviations…">${esc(l.notes)}</textarea></div>
+        <div class="dfield"><label>Evidence references</label><div class="tagline" id="evLine">${ev}</div>
+          <div class="tag-add"><input id="evIn" placeholder="filename, ticket id, screenshot ref…" autocomplete="off"><button id="evAdd" type="button">Add</button></div></div>
+        <div class="dfield"><label>Targets touched</label><div class="tagline" id="tgLine">${tg}</div>
+          <div class="tag-add"><input id="tgIn" placeholder="host / IP you noted" autocomplete="off"><button id="tgAdd" type="button">Add</button></div></div>
+      </div>
+      <div class="exec-nav">
+        <button class="btn btn-ghost" id="prevStep" ${state.execIndex===0?'disabled':''}>${svg('M19 12H5M11 6l-6 6 6 6')} Previous</button>
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="nextStep">${state.execIndex>=n-1?'Finish &amp; report':'Save &amp; next step'} ${svg('M5 12h14M13 6l6 6-6 6')}</button>
+      </div>
+    </div>`;
+  panel.querySelectorAll('.oc-btn').forEach(b=>b.onclick=()=>{
+    l.outcome=(l.outcome===b.dataset.oc)?undefined:b.dataset.oc;
+    panel.querySelectorAll('.oc-btn').forEach(x=>x.setAttribute('aria-pressed',x.dataset.oc===l.outcome));
+    renderExecRail(); updateExecProgress();
+  });
+  $('#btnStart').onclick=()=>{ l.startedAt=nowStamp(); $('#tsStart').textContent=l.startedAt; };
+  $('#btnDone').onclick=()=>{ l.completedAt=nowStamp(); $('#tsDone').textContent=l.completedAt; };
+  $('#dOperator').oninput=e=>l.operator=e.target.value;
+  $('#dNotes').oninput=e=>l.notes=e.target.value;
+  $('#evAdd').onclick=()=>{ const v=$('#evIn').value.trim(); if(v){ l.evidence.push(v); renderExecPanel(); } };
+  $('#tgAdd').onclick=()=>{ const v=$('#tgIn').value.trim(); if(v){ l.targets.push(v); renderExecPanel(); } };
+  $('#evIn').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#evAdd').click(); } };
+  $('#tgIn').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#tgAdd').click(); } };
+  panel.querySelectorAll('[data-ev]').forEach(b=>b.onclick=()=>{ l.evidence.splice(+b.dataset.ev,1); renderExecPanel(); });
+  panel.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{ l.targets.splice(+b.dataset.tg,1); renderExecPanel(); });
+  $('#prevStep').onclick=()=>{ if(state.execIndex>0){ state.execIndex--; renderExecute(); } };
+  $('#nextStep').onclick=()=>{ if(state.execIndex<n-1){ state.execIndex++; renderExecute(); } else { openReport(); } };
+}
+
+/* board-level drag & drop (wired once) */
+function initBoardDnD(){
+  const board=$('#board');
+  const clearMarks=()=>board.querySelectorAll('.slot').forEach(s=>s.classList.remove('drop-before','drop-after'));
+  const idxAt=y=>{const slots=[...board.querySelectorAll('.slot')];
+    for(let i=0;i<slots.length;i++){const r=slots[i].getBoundingClientRect(); if(y<r.top+r.height/2) return i;} return slots.length;};
+  board.addEventListener('dragover',e=>{e.preventDefault(); board.classList.add('dragover');
+    const slots=[...board.querySelectorAll('.slot')]; const idx=idxAt(e.clientY); clearMarks();
+    if(slots.length){ if(idx<slots.length) slots[idx].classList.add('drop-before'); else slots[slots.length-1].classList.add('drop-after'); }});
+  board.addEventListener('dragleave',e=>{ if(!board.contains(e.relatedTarget)){board.classList.remove('dragover'); clearMarks();} });
+  board.addEventListener('drop',e=>{e.preventDefault(); board.classList.remove('dragover');
+    const data=e.dataTransfer.getData('text/plain')||''; const idx=idxAt(e.clientY); clearMarks();
+    if(data.startsWith('palette:')) insertPiece(data.slice(8),idx);
+    else if(data.startsWith('track:')) moveTo(data.slice(6),idx);});
+}
+
+/* ── History / launch ─────────────────────────────────────────── */
+async function renderHistory(){
+  const gate=$('#histGate'); gate.classList.toggle('locked',!state.authorized);
+  $('#histToggle').setAttribute('aria-pressed',state.authorized);
+  const list=$('#histList'); list.innerHTML='';
+  if(!state.authorized) return;
+  let items=[];
+  try{ items=((await (await fetch('/api/engagements')).json()).engagements)||[]; }
+  catch(e){ list.innerHTML='<p style="color:var(--ink-faint);font-size:13.5px;padding:10px">Could not reach the server.</p>'; return; }
+  if(!items.length){ list.innerHTML='<p style="color:var(--ink-faint);font-size:13.5px;padding:10px">No saved engagements yet. Plan one, then Save it from the Execute screen.</p>'; return; }
+  items.forEach(h=>{
+    const pr=h.progress||{pct:0,worked:0,steps:0}; const date=(h.updated_at||'').slice(0,10);
+    const c=el('div','eng-card');
+    c.innerHTML=`<div class="ec-top"><div><h3>${h.name||'Untitled'}</h3><div class="ec-meta">${h.client||'—'} · ${date}</div></div>
+      <span class="status ${h.status||'planning'}">${h.status||'planning'}</span></div>
+      <div class="tacts"><span class="tact">${titleCase(h.objective)}</span><span class="tact">${h.box_type||'?'}-box</span></div>
+      <div class="progress"><span style="width:${pr.pct}%"></span></div>
+      <div class="ec-foot"><span>${pr.worked}/${pr.steps} steps documented</span><span>${pr.pct}%</span></div>`;
+    c.onclick=async()=>{ try{ const full=await (await fetch('/api/engagements/'+h.id)).json(); loadEngagement(full); }catch(e){} };
+    list.appendChild(c);
+  });
+}
+function loadEngagement(h){
+  state.engagementId=h.id||null;
+  state.objective=h.objective||state.objective; state.box=h.box_type||state.box; state.confirmed=true;
+  state.plan=(h.plan||[]).map(s=>({uid:s.uid||uid(),tid:s.tid})); state.logs={}; state.open=new Set(); state.seededFrom=h.name;
+  (h.plan||[]).forEach((s,i)=>{ const l=(h.logs||{})[s.uid]; if(l) state.logs[state.plan[i].uid]=Object.assign({outcome:undefined,operator:'',notes:'',evidence:[],targets:[],startedAt:null,completedAt:null},l); });
+  state.platforms=new Set(h.scope_platforms||[]); state.restrictions=new Set(h.restrictions||[]);
+  buildIntake();
+  $('#objTiles').querySelectorAll('.tile').forEach(c=>c.setAttribute('aria-pressed',c.dataset.v===state.objective));
+  $('#boxTiles').querySelectorAll('.tile').forEach(c=>c.setAttribute('aria-pressed',c.dataset.v===state.box));
+  $('#fName').value=h.name||''; if(h.client!=null)$('#fClient').value=h.client; if(h.authorization_ref!=null)$('#fAuth').value=h.authorization_ref;
+  if(h.time_budget_hours!=null)$('#fBudget').value=h.time_budget_hours;
+  if(h.in_scope_targets)$('#fTargets').value=(h.in_scope_targets||[]).join(', ');
+  syncChips();
+  $('#stepPlans').disabled=false; $('#stepBuild').disabled=false; $('#stepExecute').disabled=false;
+  let i=state.plan.findIndex(s=>!RESOLVED.has(outcomeOf(s.uid))); state.execIndex=i<0?0:i;
+  renderPalette(); renderBoard(); updateSummary(); renderExecute(); go('execute');
+}
+
+/* ── Report ───────────────────────────────────────────────────── */
+function openReport(){
+  const worked=state.plan.filter(s=>{const o=outcomeOf(s.uid); return o&&o!=='skipped';}).length;
+  const pct=state.plan.length?Math.round(100*worked/state.plan.length):0;
+  const rows=state.plan.map((s,i)=>{const p=PB[s.tid]; const l=state.logs[s.uid]||{}; const oc=l.outcome||'not_started';
+    const extra=[l.operator?('op: '+esc(l.operator)):'', (l.evidence&&l.evidence.length)?(l.evidence.length+' evidence ref'+(l.evidence.length>1?'s':'')):''].filter(Boolean).join(' · ');
+    return `<div class="logrow"><span class="ocdot ${oc}"></span><div style="flex:1"><div class="lt">${i+1}. ${p.name}</div>
+      <div class="lx">${p.technique_id} · ${TACTIC_LABEL[p.tactic]||p.tactic}${extra?' · '+extra:''}</div>
+      ${l.notes?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${esc(l.notes)}</div>`:''}</div>
+      <span class="pill">${OUTCOME_LABEL[oc]}</span></div>`;}).join('');
+  const plats=[...state.platforms].map(titleCase).join(', ')||'—';
+  const rests=[...state.restrictions].map(titleCase).join(', ')||'None';
+  const tacts=new Set(state.plan.map(s=>PB[s.tid]&&PB[s.tid].tactic)); tacts.delete(undefined);
+  $('#reportBody').innerHTML=`
+    <h3>Overview</h3>
+    <div class="rgrid">
+      <div class="ri"><div class="rk">Engagement</div><div class="rv">${esc($('#fName').value)||'—'}</div></div>
+      <div class="ri"><div class="rk">Client</div><div class="rv">${esc($('#fClient').value)||'—'}</div></div>
+      <div class="ri"><div class="rk">Authorization</div><div class="rv">${esc($('#fAuth').value)||'—'}</div></div>
+      <div class="ri"><div class="rk">Objective</div><div class="rv">${titleCase(state.objective)}</div></div>
+      <div class="ri"><div class="rk">Box type</div><div class="rv">${titleCase(state.box)}</div></div>
+      <div class="ri"><div class="rk">Plan source</div><div class="rv">${state.seededFrom?esc(state.seededFrom):'Custom build'}</div></div>
+    </div>
+    <h3>Rules of engagement</h3>
+    <div class="rgrid">
+      <div class="ri"><div class="rk">In-scope platforms</div><div class="rv">${plats}</div></div>
+      <div class="ri"><div class="rk">In-scope targets</div><div class="rv">${esc($('#fTargets').value)||'—'}</div></div>
+      <div class="ri"><div class="rk">Restrictions</div><div class="rv">${rests}</div></div>
+      <div class="ri"><div class="rk">Tactics covered</div><div class="rv">${tacts.size}</div></div>
+    </div>
+    <h3>Execution coverage</h3>
+    <div class="covbig"><span class="n tnum">${pct}%</span><span style="color:var(--ink-soft)">of the ${state.plan.length}-step plan documented (${worked} worked)</span></div>
+    <div style="margin-top:14px">${rows||'<div class="rv" style="color:var(--ink-faint)">Add pieces to the board and document them to populate the log.</div>'}</div>
+    <p style="margin-top:22px;font-size:12px;color:var(--ink-faint)">Compiled by Siege Tower — a planning &amp; documentation artifact. Mirrors the JSON / Markdown report the Bulwark API produces from the same data.</p>`;
+  $('#scrim').classList.add('open');
+}
+
+/* ── Persistence ──────────────────────────────────────────────── */
+function collectEngagement(){
+  return {
+    name:$('#fName').value, client:$('#fClient').value, authorization_ref:$('#fAuth').value,
+    objective:state.objective, box_type:state.box,
+    scope_platforms:[...state.platforms], restrictions:[...state.restrictions],
+    in_scope_targets:($('#fTargets').value||'').split(',').map(x=>x.trim()).filter(Boolean),
+    time_budget_hours:parseFloat($('#fBudget').value)||null,
+    plan:state.plan.map(s=>({uid:s.uid,tid:s.tid})), logs:state.logs, status:state.status||'active',
+  };
+}
+async function saveEngagement(){
+  const note=$('#execNote'); const body=collectEngagement();
+  try{
+    const url='/api/engagements'+(state.engagementId?('/'+state.engagementId):'');
+    const res=await fetch(url,{method:state.engagementId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json(); if(data&&data.id) state.engagementId=data.id;
+    if(note){ note.textContent='Saved.'; setTimeout(()=>{ if(note.textContent==='Saved.') note.textContent=''; },2500); }
+  }catch(e){ if(note) note.textContent='Save failed — is the server running?'; }
+}
+
+/* ── Navigation ───────────────────────────────────────────────── */
+function go(view){
+  state.view=view;
+  ['home','intake','plans','build','execute'].forEach(s=>$('#stage-'+s).classList.toggle('hidden',s!==view));
+  document.querySelectorAll('.step').forEach(b=>b.setAttribute('aria-current', b.dataset.goto===view));
+  const order={home:0,intake:1,plans:2,build:3,execute:4}[view]||0;
+  document.querySelectorAll('#hprog i').forEach((seg,ix)=>seg.classList.toggle('on', ix<order));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>{
+  const g=b.dataset.goto;
+  if(g==='plans'){ if($('#stepPlans').disabled) return; buildPlans(); }
+  if(g==='build'){ if($('#stepBuild').disabled) return; renderPalette(); renderBoard(); updateSummary(); }
+  if(g==='execute'){ if($('#stepExecute').disabled) return; renderExecute(); }
+  go(g);
+}));
+$('#homeBtn').addEventListener('click',()=>go('home'));
+$('#homeBtn').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault(); go('home');}});
+$('#newEngBtn').onclick=()=>{ state.engagementId=null; state.plan=[]; state.logs={}; state.confirmed=false; buildIntake(); syncChips(); go('intake'); };
+$('#scratchHomeBtn').onclick=()=>{ buildIntake(); syncChips(); openBuilderScratch(); };
+$('#scratchBtn').onclick=openBuilderScratch;
+$('#genBtn').onclick=()=>{ buildPlans(); go('plans'); };
+$('#confirmBtn').onclick=confirmPlan;
+$('#fName').addEventListener('input',syncChips);
+$('#palSearch').addEventListener('input',e=>{state.palFilter=e.target.value; renderPalette();});
+$('#histToggle').onclick=()=>{ state.authorized=!state.authorized; renderHistory(); };
+$('#reportBtn').onclick=openReport;
+$('#saveBtn').onclick=saveEngagement;
+$('#repClose').onclick=()=>$('#scrim').classList.remove('open');
+$('#scrim').onclick=e=>{ if(e.target===$('#scrim')) $('#scrim').classList.remove('open'); };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('#scrim').classList.remove('open'); });
+
+/* ── Boot ─────────────────────────────────────────────────────── */
+async function boot(){
+  try{ SIEGE = await (await fetch('/api/bootstrap')).json(); }
+  catch(e){ document.body.innerHTML='<div style="padding:48px;font-family:Georgia,serif;max-width:640px;margin:0 auto"><h1>Siege Tower</h1><p>Could not load planning data. Start the server with <code>uvicorn server.app:app --reload</code> and reload this page.</p></div>'; return; }
+  buildIntake(); syncChips(); initBoardDnD(); renderHistory(); go('home');
+}
+boot();
+</script>
