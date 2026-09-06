@@ -3,7 +3,7 @@ Siege Tower — output rendering.
 
 Turns a PlanResult into (a) a JSON-serialisable dict for APIs and storage, and
 (b) a Markdown engagement brief for humans. The Markdown is the documentation
-pillar: broad plan up top, every step drillable into its commands, expected
+pillar: broad plan up top, every step drillable into its action, expected
 results, success indicator, fallback technique, and detection notes.
 """
 from __future__ import annotations
@@ -91,15 +91,16 @@ def plan_result_to_markdown(result: PlanResult, roe_summary: str | None = None) 
                 f"*Noise {step.noise}/5 · Difficulty {step.difficulty}/5 · "
                 f"Reliability {step.reliability}/5*"
             )
+            if step.recommended_tools:
+                out.append(f"*Suggested tools:* {', '.join(step.recommended_tools)}")
             if step.steps:
                 out.append("")
-                out.append("| Command | What it does | Expected result |")
-                out.append("| --- | --- | --- |")
+                out.append("| Action | Expected result |")
+                out.append("| --- | --- |")
                 for s in step.steps:
-                    cmd = s["command"].replace("|", "\\|")
-                    desc = s["description"].replace("|", "\\|")
+                    action = s["action"].replace("|", "\\|")
                     exp = s["expected_result"].replace("|", "\\|")
-                    out.append(f"| `{cmd}` | {desc} | {exp} |")
+                    out.append(f"| {action} | {exp} |")
             if step.success_indicator:
                 out.append("")
                 out.append(f"*Success indicator:* {step.success_indicator}")
