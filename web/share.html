@@ -1,0 +1,57 @@
+<title>Siege Tower — Shared Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+[hidden]{display:none!important}
+:root{
+  --paper:#F7F3EB; --ground:#DED6C0; --ink:#20261E; --ink-soft:#464D42; --ink-faint:#79806F;
+  --line:#CBBFA4; --line-strong:#B4A788; --accent:#B0472C; --accent-deep:#8C3620; --azure:#3E6B72;
+  --sans:"IBM Plex Sans",system-ui,sans-serif; --display:"Fraunces",Georgia,serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,var(--paper),var(--ground));min-height:100vh;
+  color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55}
+.wrap{max-width:880px;margin:0 auto;padding:28px 22px 60px}
+.doc{background:var(--paper);border:1px solid var(--line-strong);border-radius:12px;
+  box-shadow:0 12px 36px -18px rgba(36,42,34,.4);padding:30px 34px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-family:var(--display);font-size:30px;margin:0 0 4px;color:var(--ink)}
+h2{font-family:var(--display);font-size:19px;margin:26px 0 10px;color:var(--accent-deep);
+  border-bottom:1px solid var(--line);padding-bottom:5px}
+h3{font-family:var(--display);font-size:15.5px;margin:16px 0 4px}
+.sub{color:var(--ink-soft);font-size:13.5px}
+.banner{font-size:12px;color:var(--ink-faint);font-style:italic;margin:10px 0 0}
+.dl{display:flex;gap:8px;margin:16px 0 0;flex-wrap:wrap}
+.dl a{padding:6px 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--paper);
+  color:var(--accent-deep);font-size:12.5px;font-weight:600;text-decoration:none}
+.dl a:hover{background:#EFE7D3}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:6px}
+.kv .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+.kv .v{font-size:14px;margin-top:2px}
+.roadmap-wrap{overflow-x:auto;padding:8px 0}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);margin:2px 0 6px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.lg{width:11px;height:11px;border-radius:50%;border:2px solid var(--line-strong)}
+.lg.w{background:var(--accent);border-color:var(--accent)}.lg.f{border-color:#9C2B1B}.lg.s{border-style:dashed}
+.cov{font-family:var(--display);font-size:26px;color:var(--accent-deep)}
+.finding{border:1px solid var(--line);border-radius:9px;padding:13px 15px;margin:10px 0;background:#FBF7EF}
+.finding h3{margin:0 0 6px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.sev{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;color:#fff}
+.sev.critical{background:#9C2B1B}.sev.high{background:#C0562E}.sev.medium{background:#B08814}
+.sev.low{background:#3E7A5A}.sev.informational{background:#3E6B72}.sev.none{background:#7C6A55}
+.cvss{font-family:var(--mono);font-size:12px;color:var(--ink-soft)}
+.fld{margin:7px 0}.fld .l{font-weight:600;font-size:12.5px;color:var(--ink-soft)}
+.fld .t{font-size:13.5px;white-space:pre-wrap}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:3px}
+.chip{font-size:11px;background:#ECE7DA;border-radius:5px;padding:1px 7px;color:var(--ink-soft);font-family:var(--mono)}
+.msg{max-width:520px;margin:12vh auto;text-align:center;font-family:var(--display);color:var(--ink-soft)}
+.msg h1{color:var(--accent-deep)}
+.foot{margin-top:22px;font-size:11.5px;color:var(--ink-faint);text-align:center}
+</style>
+
+<div class="wrap">
+  <div id="content" hidden></div>
+  <div id="message" class="msg"><h1>Loading…</h1></div>
+</div>
+<script src="/share.js" defer></script>

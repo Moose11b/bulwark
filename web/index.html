@@ -578,6 +578,19 @@ button{font-family:inherit}
   font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .dl-btn:hover{background:var(--surface-2)}.dl-btn:disabled{opacity:.5;cursor:default}
 .rep-dl-note{font-size:11.5px;color:var(--ink-faint)}
+.share-panel{width:100%;margin-top:10px;padding:12px 14px;border:1px solid var(--line);border-radius:9px;
+  background:var(--surface-2);font-size:13px}
+.share-panel h4{margin:0 0 8px;font-family:var(--display);font-size:14px;color:var(--accent-deep)}
+.share-create{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.share-create select{padding:6px 8px;border:1px solid var(--line-strong);border-radius:6px;background:var(--field);color:var(--ink);font-family:inherit}
+.share-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line)}
+.share-row input{flex:1;min-width:220px;padding:6px 8px;border:1px solid var(--line-strong);border-radius:6px;
+  background:var(--field);color:var(--ink);font-family:var(--mono);font-size:12px}
+.share-row .exp{font-size:11.5px;color:var(--ink-faint)}
+.share-row.revoked{opacity:.5}
+.share-mini{padding:4px 9px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);
+  color:var(--accent-deep);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.share-mini:hover{background:var(--surface-2)}
 
 /* ── Follow-ups on a failed step ─────────────────────────────── */
 .followups{margin-top:16px;padding:16px;border:1px solid var(--line-strong);border-radius:12px;
@@ -961,8 +974,10 @@ button{font-family:inherit}
         <button type="button" class="dl-btn" data-fmt="docx">DOCX</button>
         <button type="button" class="dl-btn" data-fmt="pdf">PDF</button>
         <button type="button" class="dl-btn" data-fmt="navigator">ATT&amp;CK layer</button>
+        <button type="button" class="dl-btn" id="shareBtn">Share link…</button>
         <span class="rep-dl-note" id="repDlNote"></span>
       </div>
+      <div class="share-panel" id="sharePanel" hidden></div>
       <button class="x" id="repClose" aria-label="Close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>

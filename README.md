@@ -97,6 +97,8 @@ All endpoints are planning/documentation only — none execute anything or conta
 | `POST` | `/api/plan` | rank plans for one ROE payload |
 | `POST` | `/api/followups` | suggest alternatives after a step fails (ATT&CK-mapped) |
 | `GET`  | `/api/engagements/{id}/navigator` | export a MITRE ATT&CK Navigator layer (JSON) |
+| `POST/GET/DELETE` | `/api/engagements/{id}/shares`, `/api/shares/{id}` | create / list / revoke read-only client links |
+| `GET`  | `/api/share/{token}` (public) | client-facing read-only report + `/download` |
 | `GET`  | `/api/engagements` | list saved engagements (with progress) |
 | `POST` | `/api/engagements` | save a new engagement |
 | `GET/PUT/DELETE` | `/api/engagements/{id}` | read / update / remove one |

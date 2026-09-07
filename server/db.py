@@ -125,6 +125,17 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 deleted_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS shares (
+                id TEXT PRIMARY KEY,
+                token_hash TEXT NOT NULL UNIQUE,
+                org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+                engagement_id TEXT NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+                created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                label TEXT,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0
+            );
             CREATE TABLE IF NOT EXISTS audit_log (
                 id TEXT PRIMARY KEY,
                 ts TEXT NOT NULL,
@@ -142,6 +153,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_ev_org ON evidence(org_id);
             CREATE INDEX IF NOT EXISTS idx_ev_eng ON evidence(engagement_id);
             CREATE INDEX IF NOT EXISTS idx_ev_find ON evidence(finding_id);
+            CREATE INDEX IF NOT EXISTS idx_shares_eng ON shares(engagement_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
             """
@@ -599,6 +611,68 @@ def delete_evidence(eid: str, org_id: str) -> bool:
 def purge_evidence(eid: str, org_id: str) -> bool:
     with _conn() as c:
         cur = c.execute("DELETE FROM evidence WHERE id=? AND org_id=?", (eid, org_id))
+        return cur.rowcount > 0
+
+
+# ── Shareable report links (client portal) ──────────────────────
+
+def create_share(org_id: str, engagement_id: str, created_by: str,
+                 ttl_days: int = 14, label: str | None = None) -> tuple[str, dict]:
+    """Create a read-only share link. Returns (plaintext token, share dict).
+    Only the token hash is stored."""
+    sid = _new_id()
+    token = new_token()
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=ttl_days)
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO shares
+               (id, token_hash, org_id, engagement_id, created_by, label, created_at, expires_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (sid, hash_token(token), org_id, engagement_id, created_by, label,
+             now.isoformat(), expires.isoformat()),
+        )
+    return token, {"id": sid, "label": label, "created_at": now.isoformat(),
+                   "expires_at": expires.isoformat(), "revoked": False}
+
+
+def resolve_share(token: str) -> dict | None:
+    """Return {id, org_id, engagement_id} for a valid, unexpired, un-revoked
+    share, else None."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM shares WHERE token_hash=?", (hash_token(token),)
+        ).fetchone()
+    if not row or row["revoked"]:
+        return None
+    if datetime.fromisoformat(row["expires_at"]) < datetime.now(timezone.utc):
+        return None
+    return {"id": row["id"], "org_id": row["org_id"],
+            "engagement_id": row["engagement_id"]}
+
+
+def list_shares(engagement_id: str, org_id: str) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, label, created_at, expires_at, revoked FROM shares "
+            "WHERE engagement_id=? AND org_id=? ORDER BY created_at DESC",
+            (engagement_id, org_id),
+        ).fetchall()
+    out = []
+    now = datetime.now(timezone.utc)
+    for r in rows:
+        expired = datetime.fromisoformat(r["expires_at"]) < now
+        out.append({"id": r["id"], "label": r["label"], "created_at": r["created_at"],
+                    "expires_at": r["expires_at"], "revoked": bool(r["revoked"]),
+                    "active": not r["revoked"] and not expired})
+    return out
+
+
+def revoke_share(share_id: str, org_id: str) -> bool:
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE shares SET revoked=1 WHERE id=? AND org_id=?", (share_id, org_id)
+        )
         return cur.rowcount > 0
 
 
