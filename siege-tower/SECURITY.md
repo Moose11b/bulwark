@@ -22,6 +22,8 @@ references, operator names, notes, evidence references).
 | **Transport** | The server refuses to bind a non-loopback interface over plaintext HTTP unless TLS is configured (or `SIEGE_ALLOW_INSECURE=1` for a trusted private network). Serve TLS directly or behind an HTTPS proxy (`SIEGE_BEHIND_TLS=1` enables HSTS). |
 | **Security headers** | Strict CSP (`script-src 'self'` — the UI ships external JS, no inline script), plus `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, COOP/CORP, and `Cache-Control: no-store` on API responses. |
 | **Shareable links** | Read-only client report links are random tokens stored only as a hash, with a required expiry (1–365 days) and one-click revocation. The public `/api/share/{token}` endpoint exposes only that one engagement's report — no auth, no other data, no writes. |
+| **Single sign-on (optional)** | OIDC Authorization-Code login when configured. The ID token is verified (signature via the provider JWKS, plus issuer, audience, expiry, and nonce) before a session is issued; users can be auto-provisioned into the default org. Off unless the four `SIEGE_OIDC_*` variables are set. |
+| **Self-service signup (optional)** | Off by default. When `SIEGE_ALLOW_SIGNUP=1`, public signup creates a **new, isolated org + admin** (never joins an existing org); rate-limited and duplicate-guarded. |
 | **Audit log** | Append-only record of logins (success and failure), logout, password changes, user management, and engagement create/update/delete/purge — with actor, org, target, IP, and timestamp. Admins read it at `GET /api/audit`. |
 | **Retention** | Deletes are soft (the row is retained with a `deleted_at` stamp). Hard erasure is an admin-only, audited `DELETE /api/engagements/{id}/purge`. |
 | **Error handling** | Unhandled errors return a generic 500; details are logged server-side only. |
@@ -49,6 +51,9 @@ app is usable but never open:
 | `SIEGE_BEHIND_TLS` | Set to `1` when TLS is terminated upstream (enables HSTS). | *(unset)* |
 | `SIEGE_ALLOW_INSECURE` | Set to `1` to allow a non-loopback bind without TLS (trusted networks only). | *(unset)* |
 | `SIEGE_TRUST_PROXY` | Set to `1` to trust `X-Forwarded-For` for client IP (only behind a known proxy). | *(unset)* |
+| `SIEGE_ALLOW_SIGNUP` | Set to `1` to enable public self-service signup (each signup creates a new org + admin). | *(off)* |
+| `SIEGE_OIDC_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | Enable OIDC single sign-on (all four required). | *(off)* |
+| `SIEGE_OIDC_LABEL` / `_AUTO_PROVISION` / `_DEFAULT_ROLE` | SSO button label; `1` to create a local user on first valid login; role for provisioned users. | `Single sign-on` / off / `operator` |
 | `SIEGE_ALLOW_SIGNUP` | Set to `1` to enable public self-service signup (each signup creates a new org + admin). | *(off)* |
 | `SIEGE_OIDC_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | Enable OIDC single sign-on (all four required). | *(off)* |
 | `SIEGE_OIDC_LABEL` / `_AUTO_PROVISION` / `_DEFAULT_ROLE` | SSO button label; `1` to create a local user on first valid login; role for provisioned users. | `Single sign-on` / off / `operator` |
