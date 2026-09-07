@@ -1000,6 +1000,104 @@ $('#findScrim').onclick=e=>{ if(e.target===$('#findScrim')) closeFindings(); };
 $('#brandBtn').onclick=openBranding;
 $('#brandClose').onclick=closeBranding;
 $('#brandScrim').onclick=e=>{ if(e.target===$('#brandScrim')) closeBranding(); };
+$('#teamBtn').onclick=openTeam;
+$('#teamClose').onclick=closeTeam;
+$('#teamScrim').onclick=e=>{ if(e.target===$('#teamScrim')) closeTeam(); };
+$('#pwBtn').onclick=()=>openChangePassword(false);
+$('#pwClose').onclick=closeChangePassword;
+$('#pwScrim').onclick=e=>{ if(e.target===$('#pwScrim') && !CURRENT_USER?.must_change) closeChangePassword(); };
+
+/* ── Team management (admin) ──────────────────────────────────── */
+async function openTeam(){
+  $('#teamScrim').classList.add('open');
+  const body=$('#teamBody'); body.innerHTML='<div class="brand-note">Loading…</div>';
+  let users=[];
+  try{ users=((await (await api('/api/users')).json()).users)||[]; }catch(e){}
+  const rows=users.map(u=>{
+    const roles=['viewer','operator','admin'].map(r=>`<option value="${r}"${u.role===r?' selected':''}>${r}</option>`).join('');
+    const last=(u.last_login_at||'').slice(0,10)||'—';
+    return `<tr class="${u.is_active?'':'u-inactive'}" data-uid="${esc(u.id)}">
+      <td>${esc(u.username)}${u.id===CURRENT_USER.id?' <span class="brand-note">(you)</span>':''}</td>
+      <td>${esc(u.email)||'—'}</td>
+      <td><select class="u-role"${u.id===CURRENT_USER.id?' disabled':''}>${roles}</select></td>
+      <td>${u.is_active?'Active':'Inactive'}</td>
+      <td>${esc(last)}</td>
+      <td class="u-acts">
+        <button class="share-mini u-reset">Reset pw</button>
+        ${u.id===CURRENT_USER.id?'':`<button class="share-mini u-active">${u.is_active?'Deactivate':'Activate'}</button>`}
+      </td></tr>`;
+  }).join('');
+  body.innerHTML=`
+    <div class="team-actions">
+      <div class="tf"><label>Username</label><input id="nuName" autocomplete="off"></div>
+      <div class="tf"><label>Email</label><input id="nuEmail" autocomplete="off"></div>
+      <div class="tf"><label>Role</label><select id="nuRole"><option value="operator">operator</option><option value="viewer">viewer</option><option value="admin">admin</option></select></div>
+      <div class="tf"><label>Temp password (≥12)</label><input id="nuPass" autocomplete="off"></div>
+      <button class="btn btn-primary" id="nuCreate" style="padding:9px 14px">Add user</button>
+      <span class="brand-note" id="teamNote"></span>
+    </div>
+    <table class="team"><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  $('#nuCreate').onclick=createTeamUser;
+  body.querySelectorAll('tr[data-uid]').forEach(tr=>{
+    const uid=tr.dataset.uid;
+    const rs=tr.querySelector('.u-role'); if(rs&&!rs.disabled) rs.onchange=()=>patchUser(uid,{role:rs.value});
+    const ra=tr.querySelector('.u-reset'); if(ra) ra.onclick=()=>resetUserPw(uid,ra);
+    const ua=tr.querySelector('.u-active'); if(ua) ua.onclick=()=>patchUser(uid,{is_active:tr.classList.contains('u-inactive')},true);
+  });
+}
+function closeTeam(){ $('#teamScrim').classList.remove('open'); }
+async function createTeamUser(){
+  const note=$('#teamNote');
+  const username=$('#nuName').value.trim(), email=$('#nuEmail').value.trim()||null,
+        role=$('#nuRole').value, password=$('#nuPass').value;
+  if(!username||!password){ if(note) note.textContent='Username and a temp password are required.'; return; }
+  try{ const r=await api('/api/users',{method:'POST',body:JSON.stringify({username,email,role,password})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ if(note) note.textContent=(d.detail||'Create failed.'); return; }
+    openTeam();
+  }catch(e){ if(note) note.textContent='Create failed.'; }
+}
+async function patchUser(uid,fields,reload){
+  try{ await api('/api/users/'+uid,{method:'PATCH',body:JSON.stringify(fields)}); }catch(e){}
+  if(reload!==false) openTeam();
+}
+async function resetUserPw(uid,btn){
+  if(!confirm('Reset this user’s password? Their sessions end and they must set a new one.')) return;
+  try{ const r=await api('/api/users/'+uid+'/reset-password',{method:'POST'});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ btn.textContent='Failed'; return; }
+    const td=btn.closest('td'); td.innerHTML='<span class="temp-pw" title="Copy and give to the user">'+esc(d.temp_password)+'</span>';
+  }catch(e){ btn.textContent='Failed'; }
+}
+
+/* ── Change password (voluntary or forced) ────────────────────── */
+function openChangePassword(forced){
+  $('#pwScrim').classList.add('open');
+  $('#pwClose').hidden=!!forced;
+  const body=$('#pwBody');
+  body.innerHTML=`
+    ${forced?'<div class="pw-forced">Your password was reset. Set a new one to continue.</div>':''}
+    <div class="fe-field"><label>Current password</label><input id="pwCur" type="password" autocomplete="current-password"></div>
+    <div class="fe-field"><label>New password (at least 12 characters)</label><input id="pwNew" type="password" autocomplete="new-password"></div>
+    <div class="fe-field"><label>Confirm new password</label><input id="pwConf" type="password" autocomplete="new-password"></div>
+    <div class="brand-actions"><button class="btn btn-primary" id="pwSave">Update password</button><span class="brand-note" id="pwNote"></span></div>`;
+  $('#pwSave').onclick=submitChangePassword;
+}
+function closeChangePassword(){ $('#pwScrim').classList.remove('open'); }
+async function submitChangePassword(){
+  const note=$('#pwNote');
+  const cur=$('#pwCur').value, nw=$('#pwNew').value, cf=$('#pwConf').value;
+  if(nw.length<12){ if(note) note.textContent='New password must be at least 12 characters.'; return; }
+  if(nw!==cf){ if(note) note.textContent='Passwords do not match.'; return; }
+  try{ const r=await api('/api/auth/change-password',{method:'POST',body:JSON.stringify({current_password:cur,new_password:nw})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ if(note) note.textContent=(d.detail||'Update failed.'); return; }
+    if(CURRENT_USER) CURRENT_USER.must_change=false;
+    if(note) note.textContent='Password updated.';
+    setTimeout(closeChangePassword,700);
+  }catch(e){ if(note) note.textContent='Update failed.'; }
+}
 
 /* ── Engagement templates ─────────────────────────────────────── */
 let TEMPLATES=[];
@@ -1092,6 +1190,7 @@ function refreshUserChip(){
   const chip=$('#userChip'); if(!chip) return;
   if(CURRENT_USER){ chip.hidden=false; $('#userName').textContent=CURRENT_USER.username+' · '+CURRENT_USER.role;
     const bb=$('#brandBtn'); if(bb) bb.hidden = (CURRENT_USER.role!=='admin');
+    const tb=$('#teamBtn'); if(tb) tb.hidden = (CURRENT_USER.role!=='admin');
   } else chip.hidden=true;
 }
 
@@ -1175,6 +1274,7 @@ async function startApp(){
   (SIEGE.playbook||[]).forEach(p => PB[p.technique_id] = p);
   hideLogin();
   buildIntake(); syncChips(); initBoardDnD(); renderHistory(); refreshUserChip(); loadTemplates(); go('home');
+  if(CURRENT_USER && CURRENT_USER.must_change) openChangePassword(true);
 }
 
 async function boot(){

@@ -74,6 +74,7 @@ def init_db() -> None:
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'operator',
                 is_active INTEGER NOT NULL DEFAULT 1,
+                must_change_password INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 last_login_at TEXT
             );
@@ -167,10 +168,13 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
             """
         )
-        # Lightweight migration: add orgs.branding to pre-existing databases.
-        cols = [r[1] for r in c.execute("PRAGMA table_info(orgs)").fetchall()]
-        if "branding" not in cols:
+        # Lightweight migrations for pre-existing databases.
+        org_cols = [r[1] for r in c.execute("PRAGMA table_info(orgs)").fetchall()]
+        if "branding" not in org_cols:
             c.execute("ALTER TABLE orgs ADD COLUMN branding TEXT")
+        user_cols = [r[1] for r in c.execute("PRAGMA table_info(users)").fetchall()]
+        if "must_change_password" not in user_cols:
+            c.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
 
 
 # ── Orgs & users ─────────────────────────────────────────────────
@@ -218,7 +222,7 @@ def count_users() -> int:
 
 def create_user(
     org_id: str, username: str, password: str, role: str = "operator",
-    email: str | None = None,
+    email: str | None = None, must_change: bool = False,
 ) -> dict:
     if role not in VALID_ROLES:
         raise ValueError(f"Invalid role: {role}")
@@ -228,9 +232,10 @@ def create_user(
     with _conn() as c:
         c.execute(
             """INSERT INTO users
-               (id, org_id, username, email, password_hash, role, is_active, created_at)
-               VALUES (?,?,?,?,?,?,1,?)""",
-            (uid, org_id, username, email, pwd, role, now),
+               (id, org_id, username, email, password_hash, role, is_active,
+                must_change_password, created_at)
+               VALUES (?,?,?,?,?,?,1,?,?)""",
+            (uid, org_id, username, email, pwd, role, 1 if must_change else 0, now),
         )
     return get_user(uid)
 
@@ -281,11 +286,30 @@ def update_user(uid: str, org_id: str, *, role: str | None = None,
 
 
 def set_password(uid: str, password: str) -> None:
+    """Set a password chosen by the user — clears any forced-change flag."""
     with _conn() as c:
         c.execute(
-            "UPDATE users SET password_hash=? WHERE id=?", (hash_password(password), uid)
+            "UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?",
+            (hash_password(password), uid),
         )
         c.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+
+
+def admin_reset_password(uid: str, org_id: str) -> str | None:
+    """Reset a user's password to a strong temp value (same org only), forcing a
+    change on next login. Returns the temp password once, or None if not found."""
+    import secrets
+    user = get_user(uid)
+    if not user or user["org_id"] != org_id:
+        return None
+    temp = secrets.token_urlsafe(12)
+    with _conn() as c:
+        c.execute(
+            "UPDATE users SET password_hash=?, must_change_password=1 WHERE id=? AND org_id=?",
+            (hash_password(temp), uid, org_id),
+        )
+        c.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+    return temp
 
 
 def mark_login(uid: str) -> None:
@@ -301,6 +325,7 @@ def _user_row(row: sqlite3.Row | None) -> dict | None:
         "email": row["email"], "role": row["role"],
         "is_active": bool(row["is_active"]), "created_at": row["created_at"],
         "last_login_at": row["last_login_at"], "password_hash": row["password_hash"],
+        "must_change_password": bool(row["must_change_password"]),
     }
 
 
