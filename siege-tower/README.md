@@ -96,6 +96,7 @@ All endpoints are planning/documentation only — none execute anything or conta
 | `GET`  | `/api/bootstrap` | reference vocab, technique library, ranked plans |
 | `POST` | `/api/plan` | rank plans for one ROE payload |
 | `POST` | `/api/followups` | suggest alternatives after a step fails (ATT&CK-mapped) |
+| `GET`  | `/api/engagements/{id}/navigator` | export a MITRE ATT&CK Navigator layer (JSON) |
 | `GET`  | `/api/engagements` | list saved engagements (with progress) |
 | `POST` | `/api/engagements` | save a new engagement |
 | `GET/PUT/DELETE` | `/api/engagements/{id}` | read / update / remove one |
