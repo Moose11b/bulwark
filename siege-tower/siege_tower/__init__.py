@@ -19,6 +19,7 @@ Typical use:
 """
 from .capabilities import CAPABILITY_LABELS, GOAL_CAPABILITY
 from .engine import build_plans, filter_playbook, start_capabilities
+from .followups import FollowupSuggestion, suggest_followups
 from .playbook import DEFAULT_PLAYBOOK, playbook_by_id
 from .render import plan_result_to_dict, plan_result_to_markdown
 from .schema import (
@@ -36,6 +37,7 @@ __all__ = [
     "Play", "PlayStep", "DEFAULT_PLAYBOOK", "playbook_by_id",
     # engine
     "build_plans", "filter_playbook", "start_capabilities",
+    "suggest_followups", "FollowupSuggestion",
     "GOAL_CAPABILITY", "CAPABILITY_LABELS",
     # outputs
     "PlanResult", "PlanOption", "PlanStepView",

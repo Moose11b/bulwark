@@ -65,7 +65,10 @@ it never leaves your machine and holds only what you type.
   reorder, trim, or extend it to any length.
 - **Execute** — walk the plan step by step and document each move: outcome,
   operator, timestamps, notes, evidence references, and targets touched, with a
-  live progress bar.
+  live progress bar. When a step is marked **failed or blocked**, Siege Tower
+  surfaces ranked **follow-up techniques** — curated fallbacks plus functional
+  alternatives that reach the same capability and keep a path to the objective
+  open — each addable to the plan in one click.
 - **Field report** — compiled from the ROE, the plan, and the log, as JSON or
   Markdown.
 
@@ -92,6 +95,7 @@ All endpoints are planning/documentation only — none execute anything or conta
 | --- | --- | --- |
 | `GET`  | `/api/bootstrap` | reference vocab, technique library, ranked plans |
 | `POST` | `/api/plan` | rank plans for one ROE payload |
+| `POST` | `/api/followups` | suggest alternatives after a step fails (ATT&CK-mapped) |
 | `GET`  | `/api/engagements` | list saved engagements (with progress) |
 | `POST` | `/api/engagements` | save a new engagement |
 | `GET/PUT/DELETE` | `/api/engagements/{id}` | read / update / remove one |

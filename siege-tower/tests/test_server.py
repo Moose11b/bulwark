@@ -122,3 +122,22 @@ def test_engagement_crud_and_report(client, auth):
 
 def test_report_404(client, auth):
     assert client.get("/api/engagements/nope/report", headers=auth).status_code == 404
+
+
+def test_followups_endpoint(client, auth):
+    r = client.post("/api/followups", headers=auth, json={
+        "failed_technique_id": "T1649", "objective": "domain_admin", "box_type": "grey",
+        "succeeded_technique_ids": [],
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["failed_technique_id"] == "T1649"
+    assert body["suggestions"]
+    first = body["suggestions"][0]
+    assert first["is_fallback"] and "reason" in first and "keeps_path_open" in first
+
+
+def test_followups_requires_auth(client):
+    assert client.post("/api/followups",
+                       json={"failed_technique_id": "T1649", "objective": "domain_admin"}
+                       ).status_code == 401
