@@ -101,7 +101,7 @@ app = FastAPI(title="Siege Tower", version="0.2.0", lifespan=_lifespan)
 app.add_middleware(SecurityHeadersMiddleware, hsts=_BEHIND_TLS)
 app.add_middleware(
     BodySizeLimitMiddleware, max_bytes=_MAX_BODY_BYTES,
-    upload_prefixes=("/api/evidence", "/api/imports"),
+    upload_prefixes=("/api/evidence", "/api/imports", "/api/branding/logo"),
     upload_max_bytes=evidence_store.MAX_EVIDENCE_BYTES + 1_048_576,  # + multipart overhead
 )
 
@@ -457,6 +457,80 @@ def audit_log(user: dict = Depends(auth.require_role("admin"))):
     return {"entries": db.list_audit(user["org_id"])}
 
 
+# ── Report branding (org logo & colours) ─────────────────────────
+
+import re as _re
+
+_HEX_RE = _re.compile(r"^#[0-9A-Fa-f]{6}$")
+_MAX_LOGO_BYTES = 262_144  # 256 KiB
+
+
+class BrandingIn(BaseModel):
+    accent: str | None = Field(default=None, max_length=9)
+    company_name: str | None = Field(default=None, max_length=200)
+    footer: str | None = Field(default=None, max_length=500)
+    confidentiality: str | None = Field(default=None, max_length=60)
+
+
+def _public_branding(b: dict) -> dict:
+    out = {k: b.get(k) for k in ("accent", "company_name", "footer", "confidentiality")}
+    out["has_logo"] = bool(b.get("logo_data_uri"))
+    return out
+
+
+@app.get("/api/branding")
+def get_branding(user: dict = Depends(auth.current_user)):
+    return _public_branding(db.get_branding(user["org_id"]))
+
+
+@app.put("/api/branding")
+def update_branding(body: BrandingIn, request: Request,
+                    user: dict = Depends(auth.require_role("admin"))):
+    data = body.model_dump(exclude_unset=True)
+    if data.get("accent") and not _HEX_RE.match(data["accent"]):
+        raise HTTPException(status_code=400, detail="accent must be a #RRGGBB hex colour")
+    b = db.set_branding(user["org_id"], data)
+    db.audit("branding_update", actor_id=user["id"], org_id=user["org_id"],
+             ip=getattr(request.state, "client_ip", None))
+    return _public_branding(b)
+
+
+@app.post("/api/branding/logo", status_code=201)
+async def upload_logo(request: Request, file: UploadFile = File(...),
+                      user: dict = Depends(auth.require_role("admin"))):
+    data = await file.read(_MAX_LOGO_BYTES + 1)
+    if len(data) > _MAX_LOGO_BYTES:
+        raise HTTPException(status_code=413, detail="Logo too large (max 256 KiB)")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    ct = file.content_type or "image/png"
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Logo must be an image")
+    import base64
+    uri = f"data:{ct};base64," + base64.b64encode(data).decode("ascii")
+    db.set_branding(user["org_id"], {"logo_data_uri": uri})
+    db.audit("branding_logo", actor_id=user["id"], org_id=user["org_id"],
+             ip=getattr(request.state, "client_ip", None))
+    return {"has_logo": True}
+
+
+@app.delete("/api/branding/logo", status_code=204)
+def delete_logo(user: dict = Depends(auth.require_role("admin"))):
+    db.set_branding(user["org_id"], {"logo_data_uri": None})
+    return Response(status_code=204)
+
+
+@app.get("/api/branding/logo")
+def serve_logo(user: dict = Depends(auth.current_user)):
+    uri = db.get_branding(user["org_id"]).get("logo_data_uri")
+    m = _re.match(r"data:([^;]+);base64,(.*)", uri or "", _re.S)
+    if not m:
+        raise HTTPException(status_code=404, detail="No logo set")
+    import base64
+    return Response(content=base64.b64decode(m.group(2)), media_type=m.group(1),
+                    headers={"Cache-Control": "private, max-age=300"})
+
+
 # ── Planning (auth required) ─────────────────────────────────────
 
 @app.get("/api/bootstrap")
@@ -621,6 +695,7 @@ def _assemble_report(eid: str, org_id: str) -> dict:
     rep["findings"] = findings
     org = db.get_org(org_id)
     rep["org_name"] = org["name"] if org else None
+    rep["branding"] = db.get_branding(org_id)
     return rep
 
 

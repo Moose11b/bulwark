@@ -106,6 +106,7 @@ All endpoints are planning/documentation only — none execute anything or conta
 | `GET/POST/PUT/DELETE` | `/api/findings`, `/api/library` | findings & reusable findings library |
 | `POST/GET` | `/api/evidence` (+`/{id}/download`) | upload / fetch evidence (hashed, encrypted) |
 | `GET`  | `/api/cvss?vector=...` | CVSS v3.1 score + severity |
+| `GET/PUT` `POST/DELETE` | `/api/branding` (+`/logo`) | org report branding: colours, company, footer, logo (admin) |
 
 ## Keeping the playbook current
 
