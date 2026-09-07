@@ -145,6 +145,26 @@ class Encryptor:
         # Legacy plaintext row.
         return value
 
+    # Byte-level encryption for stored files (evidence). A short magic prefix
+    # records whether the payload is encrypted, so reads work across a key being
+    # added or removed later.
+    def encrypt_bytes(self, data: bytes) -> bytes:
+        if not self._fernet:
+            return b"SGF1R:" + data
+        return b"SGF1E:" + self._fernet.encrypt(data)
+
+    def decrypt_bytes(self, blob: bytes) -> bytes:
+        if blob.startswith(b"SGF1E:"):
+            if not self._fernet:
+                raise RuntimeError(
+                    "Found an encrypted evidence file but SIEGE_ENCRYPTION_KEY is "
+                    "not set. Restore the key used to store it."
+                )
+            return self._fernet.decrypt(blob[len(b"SGF1E:"):])
+        if blob.startswith(b"SGF1R:"):
+            return blob[len(b"SGF1R:"):]
+        return blob  # legacy raw file
+
     @staticmethod
     def _warn(msg: str) -> None:
         banner = "!" * 72
@@ -239,17 +259,28 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Reject oversized request bodies before they are parsed or stored."""
+    """Reject oversized request bodies before they are parsed or stored.
 
-    def __init__(self, app, max_bytes: int) -> None:
+    Paths under ``upload_prefixes`` get the larger ``upload_max_bytes`` cap so
+    evidence file uploads aren't rejected by the small default body limit.
+    """
+
+    def __init__(self, app, max_bytes: int, upload_prefixes: tuple = (),
+                 upload_max_bytes: int | None = None) -> None:
         super().__init__(app)
         self.max_bytes = max_bytes
+        self.upload_prefixes = upload_prefixes
+        self.upload_max_bytes = upload_max_bytes or max_bytes
 
     async def dispatch(self, request: Request, call_next):
+        cap = self.max_bytes
+        path = request.url.path
+        if any(path.startswith(p) for p in self.upload_prefixes):
+            cap = self.upload_max_bytes
         cl = request.headers.get("content-length")
         if cl is not None:
             try:
-                if int(cl) > self.max_bytes:
+                if int(cl) > cap:
                     return JSONResponse(
                         {"detail": "Request body too large"}, status_code=413
                     )
