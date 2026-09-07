@@ -359,6 +359,7 @@ function renderExecPanel(){
         <div class="dfield"><label>Targets touched</label><div class="tagline" id="tgLine">${tg}</div>
           <div class="tag-add"><input id="tgIn" placeholder="host / IP you noted" autocomplete="off"><button id="tgAdd" type="button">Add</button></div></div>
       </div>
+      <div class="followups" id="followups" hidden></div>
       <div class="exec-nav">
         <button class="btn btn-ghost" id="prevStep" ${state.execIndex===0?'disabled':''}>${svg('M19 12H5M11 6l-6 6 6 6')} Previous</button>
         <span class="spacer"></span>
@@ -368,7 +369,7 @@ function renderExecPanel(){
   panel.querySelectorAll('.oc-btn').forEach(b=>b.onclick=()=>{
     l.outcome=(l.outcome===b.dataset.oc)?undefined:b.dataset.oc;
     panel.querySelectorAll('.oc-btn').forEach(x=>x.setAttribute('aria-pressed',x.dataset.oc===l.outcome));
-    renderExecRail(); updateExecProgress();
+    renderExecRail(); updateExecProgress(); renderFollowups();
   });
   $('#btnStart').onclick=()=>{ l.startedAt=nowStamp(); $('#tsStart').textContent=l.startedAt; };
   $('#btnDone').onclick=()=>{ l.completedAt=nowStamp(); $('#tsDone').textContent=l.completedAt; };
@@ -382,6 +383,59 @@ function renderExecPanel(){
   panel.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{ l.targets.splice(+b.dataset.tg,1); renderExecPanel(); });
   $('#prevStep').onclick=()=>{ if(state.execIndex>0){ state.execIndex--; renderExecute(); } };
   $('#nextStep').onclick=()=>{ if(state.execIndex<n-1){ state.execIndex++; renderExecute(); } else { openReport(); } };
+  renderFollowups();
+}
+
+/* ── Follow-ups when a step fails ──────────────────────────────── */
+// Technique IDs of steps that have worked so far — used to decide which
+// follow-ups are ready now and still reach the objective.
+function succeededTids(){
+  const out=[];
+  state.plan.forEach(s=>{ const oc=outcomeOf(s.uid); if(oc==='succeeded'||oc==='fell_back') out.push(s.tid); });
+  return out;
+}
+
+async function renderFollowups(){
+  const box=$('#followups'); if(!box) return;
+  const slot=state.plan[state.execIndex]; if(!slot){ box.hidden=true; return; }
+  const oc=outcomeOf(slot.uid);
+  if(oc!=='failed'&&oc!=='blocked'){ box.hidden=true; box.innerHTML=''; return; }
+  box.hidden=false;
+  box.innerHTML='<div class="fu-head">Recommended follow-ups</div><div class="fu-note">Fetching alternate routes…</div>';
+  let data;
+  try{
+    const res=await api('/api/followups',{method:'POST',body:JSON.stringify({
+      failed_technique_id:slot.tid, objective:state.objective, box_type:state.box,
+      scope_platforms:[...state.platforms], restrictions:[...state.restrictions],
+      succeeded_technique_ids:succeededTids(),
+    })});
+    data=await res.json();
+  }catch(e){ box.innerHTML='<div class="fu-head">Recommended follow-ups</div><div class="fu-note">Could not load suggestions.</div>'; return; }
+  const sugg=(data&&data.suggestions)||[];
+  if(!sugg.length){ box.innerHTML='<div class="fu-head">Recommended follow-ups</div><div class="fu-note">No in-scope alternative reaches the objective from here. Consider revisiting scope or an earlier step.</div>'; return; }
+  const cards=sugg.map(s=>{
+    const badges=[
+      s.is_fallback?'<span class="fu-badge fb">Curated fallback</span>':'',
+      s.ready_now?'<span class="fu-badge ready">Ready now</span>':'<span class="fu-badge wait">Needs a prior step</span>',
+      s.keeps_path_open?'<span class="fu-badge path">Keeps path to objective</span>':'',
+    ].filter(Boolean).join('');
+    const provides=(s.provides||[]).map(x=>`<span class="fu-cap">${esc(x)}</span>`).join('');
+    return `<div class="fu-card">
+      <div class="fu-top"><span class="fu-tid">${esc(s.technique_id)}</span>
+        <span class="fu-tac">${esc(TACTIC_LABEL[s.tactic]||s.tactic)}</span>
+        <button class="fu-add" data-tid="${esc(s.technique_id)}" type="button">+ Add to plan</button></div>
+      <div class="fu-name">${esc(s.name)}</div>
+      <div class="fu-why">${esc(s.reason)}</div>
+      <div class="fu-badges">${badges}</div>
+      ${provides?`<div class="fu-provides">Grants: ${provides}</div>`:''}
+    </div>`;
+  }).join('');
+  box.innerHTML=`<div class="fu-head">Recommended follow-ups <span class="fu-sub">this step ${esc(OUTCOME_LABEL[oc]||oc).toLowerCase()} — here are other ways forward</span></div><div class="fu-grid">${cards}</div>`;
+  box.querySelectorAll('.fu-add').forEach(b=>b.onclick=()=>{
+    // Insert the chosen technique as the next step, right after the failed one.
+    state.plan.splice(state.execIndex+1,0,{uid:uid(),tid:b.dataset.tid});
+    state.execIndex++; renderExecute();
+  });
 }
 
 /* board-level drag & drop (wired once) */

@@ -539,6 +539,31 @@ button{font-family:inherit}
 .exec-nav .spacer{margin-left:auto}
 
 @media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important}}
+/* ── Follow-ups on a failed step ─────────────────────────────── */
+.followups{margin-top:16px;padding:16px;border:1px solid #C9A99A;border-radius:12px;
+  background:linear-gradient(180deg,#FBEDE8,#F7E7E0)}
+.fu-head{font-family:Fraunces,Georgia,serif;font-size:15px;font-weight:600;color:#7C2A20;margin-bottom:4px}
+.fu-sub{font-family:Spectral,Georgia,serif;font-size:12.5px;font-weight:400;color:#8A5A4A}
+.fu-note{font-size:13px;color:#8A5A4A;padding:4px 0}
+.fu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:10px}
+.fu-card{background:#FCF8EE;border:1px solid #D9C4A0;border-radius:9px;padding:11px 12px}
+.fu-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fu-tid{font-family:IBM Plex Mono,monospace;font-size:12px;font-weight:600;color:#3C5A6B}
+.fu-tac{font-size:11px;color:#7C6A55;text-transform:uppercase;letter-spacing:.04em}
+.fu-add{margin-left:auto;padding:4px 9px;border:1px solid #9C3B2E;border-radius:6px;background:#9C3B2E;
+  color:#F6F0E1;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.fu-add:hover{background:#8A3327}
+.fu-name{font-family:Fraunces,Georgia,serif;font-size:14px;color:#2C2417;margin:6px 0 3px}
+.fu-why{font-size:12.5px;color:#5B5138}
+.fu-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.fu-badge{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;letter-spacing:.02em}
+.fu-badge.fb{background:#E7D9B8;color:#6B5B23}
+.fu-badge.ready{background:#D7E6D9;color:#2E5A3A}
+.fu-badge.wait{background:#E6DDD2;color:#7C6A55}
+.fu-badge.path{background:#D6E1EA;color:#2E4A5C}
+.fu-provides{margin-top:8px;font-size:11.5px;color:#7C6A55}
+.fu-cap{display:inline-block;background:#EFE7D3;border-radius:5px;padding:1px 6px;margin:2px 3px 0 0}
+
 /* ── Auth: login overlay & user chip ─────────────────────────── */
 .login-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
   background:rgba(38,30,18,0.55);backdrop-filter:blur(3px);padding:24px}

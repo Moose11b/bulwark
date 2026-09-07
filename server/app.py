@@ -27,9 +27,16 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from siege_tower import BoxType, EngagementInput, Objective, build_plans
+import dataclasses
+
+from siege_tower import (
+    BoxType, EngagementInput, Objective, build_plans, suggest_followups,
+)
+from siege_tower.playbook import DEFAULT_PLAYBOOK
 from siege_tower.render import plan_result_to_dict
 from siege_tower.schema import Platform, Restriction, Tactic
+
+_PLAYS_BY_ID = {p.technique_id: p for p in DEFAULT_PLAYBOOK}
 
 from . import auth, db
 from .bootstrap import build_bootstrap
@@ -184,6 +191,21 @@ class RoeIn(BaseModel):
     emulate_adversary: str | None = Field(default=None, max_length=64)
     objective_note: str | None = _LONG
     max_plans: int = Field(default=5, ge=1, le=10)
+
+
+class FollowupIn(BaseModel):
+    failed_technique_id: str = Field(min_length=1, max_length=32)
+    objective: str = Field(max_length=64)
+    box_type: str = Field(default="black", max_length=16)
+    scope_platforms: list[str] = Field(default_factory=list, max_length=32)
+    provided_access: list[str] = Field(default_factory=list, max_length=32)
+    restrictions: list[str] = Field(default_factory=list, max_length=32)
+    forbidden_technique_ids: list[str] = Field(default_factory=list, max_length=200)
+    forbidden_tactics: list[str] = Field(default_factory=list, max_length=32)
+    allow_evidence_removal: bool = False
+    # Technique IDs the team has already completed (succeeded/fell back), used to
+    # decide which follow-ups are ready now and still reach the objective.
+    succeeded_technique_ids: list[str] = Field(default_factory=list, max_length=1000)
 
 
 class EngagementIn(BaseModel):
@@ -361,6 +383,38 @@ def plan(roe: RoeIn, user: dict = Depends(auth.current_user)):
         objective_note=roe.objective_note,
     )
     return plan_result_to_dict(build_plans(inp))
+
+
+@app.post("/api/followups")
+def followups(body: FollowupIn, user: dict = Depends(auth.current_user)):
+    """Given a step that failed, suggest ranked alternative techniques that
+    reach the same goal and keep a path to the objective open.
+
+    A pure computation over the playbook and the ROE — nothing is contacted."""
+    try:
+        objective = Objective(body.objective)
+        box_type = BoxType(body.box_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid ROE: {exc}")
+    inp = EngagementInput(
+        objective=objective, box_type=box_type,
+        scope_platforms=_coerce_list(body.scope_platforms, Platform),
+        provided_access=list(body.provided_access),
+        restrictions=_coerce_list(body.restrictions, Restriction),
+        forbidden_technique_ids=list(body.forbidden_technique_ids),
+        forbidden_tactics=_coerce_list(body.forbidden_tactics, Tactic),
+        allow_evidence_removal=body.allow_evidence_removal,
+    )
+    achieved: set[str] = set()
+    for tid in body.succeeded_technique_ids:
+        p = _PLAYS_BY_ID.get(tid)
+        if p:
+            achieved.update(p.provides)
+    suggestions = suggest_followups(body.failed_technique_id, inp, achieved=achieved)
+    return {
+        "failed_technique_id": body.failed_technique_id,
+        "suggestions": [dataclasses.asdict(s) for s in suggestions],
+    }
 
 
 # ── Engagements (auth + tenancy + roles) ─────────────────────────
