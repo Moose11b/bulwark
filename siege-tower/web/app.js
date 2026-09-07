@@ -662,10 +662,13 @@ async function downloadReport(fmt){
   if(!state.engagementId){ if(note) note.textContent='Save the engagement first to download.'; return; }
   if(note) note.textContent='Preparing…';
   try{
-    const res=await api('/api/engagements/'+state.engagementId+'/report?format='+fmt);
+    const path=(fmt==='navigator')
+      ? '/api/engagements/'+state.engagementId+'/navigator'
+      : '/api/engagements/'+state.engagementId+'/report?format='+fmt;
+    const res=await api(path);
     if(!res.ok){ if(note) note.textContent='Download failed.'; return; }
     const blob=await res.blob();
-    const ext=(fmt==='markdown')?'md':fmt;
+    const ext=(fmt==='markdown')?'md':(fmt==='navigator')?'navigator.json':fmt;
     const base=($('#fName').value||'engagement').replace(/[^\w.-]+/g,'_');
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download=base+'.'+ext;
