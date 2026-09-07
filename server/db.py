@@ -125,6 +125,15 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 deleted_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS engagement_templates (
+                id TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+                created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                data TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT
+            );
             CREATE TABLE IF NOT EXISTS shares (
                 id TEXT PRIMARY KEY,
                 token_hash TEXT NOT NULL UNIQUE,
@@ -636,6 +645,69 @@ def purge_evidence(eid: str, org_id: str) -> bool:
     with _conn() as c:
         cur = c.execute("DELETE FROM evidence WHERE id=? AND org_id=?", (eid, org_id))
         return cur.rowcount > 0
+
+
+# ── Engagement templates (reusable ROE presets) ─────────────────
+
+def create_template(org_id: str, created_by: str, data: dict) -> dict:
+    tid = _new_id()
+    now = _now()
+    body = {k: v for k, v in data.items()
+            if k not in ("id", "created_at", "updated_at", "org_id", "created_by", "builtin")}
+    body = {**body, "id": tid, "created_at": now, "updated_at": now}
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO engagement_templates
+               (id, org_id, created_by, data, created_at, updated_at)
+               VALUES (?,?,?,?,?,?)""",
+            (tid, org_id, created_by, _encode(body), now, now),
+        )
+    return body
+
+
+def get_template(tid: str, org_id: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT data FROM engagement_templates WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (tid, org_id),
+        ).fetchone()
+    return _decode(row["data"]) if row else None
+
+
+def update_template(tid: str, org_id: str, data: dict) -> dict | None:
+    existing = get_template(tid, org_id)
+    if not existing:
+        return None
+    now = _now()
+    incoming = {k: v for k, v in data.items()
+                if k not in ("id", "created_at", "org_id", "created_by", "builtin")}
+    merged = {**existing, **incoming, "id": tid,
+              "created_at": existing.get("created_at", now), "updated_at": now}
+    with _conn() as c:
+        c.execute(
+            "UPDATE engagement_templates SET data=?, updated_at=? WHERE id=? AND org_id=?",
+            (_encode(merged), now, tid, org_id),
+        )
+    return merged
+
+
+def delete_template(tid: str, org_id: str) -> bool:
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE engagement_templates SET deleted_at=? WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (_now(), tid, org_id),
+        )
+        return cur.rowcount > 0
+
+
+def list_templates(org_id: str) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT data FROM engagement_templates WHERE org_id=? AND deleted_at IS NULL "
+            "ORDER BY updated_at DESC",
+            (org_id,),
+        ).fetchall()
+    return [_decode(r["data"]) for r in rows]
 
 
 # ── Shareable report links (client portal) ──────────────────────

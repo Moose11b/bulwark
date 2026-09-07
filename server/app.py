@@ -854,6 +854,64 @@ def cvss(vector: str, user: dict = Depends(auth.current_user)):
     return score_vector(vector)
 
 
+# ── Engagement templates (reusable ROE presets) ─────────────────
+
+class TemplateIn(BaseModel):
+    model_config = {"extra": "ignore"}
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    objective: str = Field(default="", max_length=64)
+    box_type: str = Field(default="black", max_length=16)
+    scope_platforms: list[str] = Field(default_factory=list, max_length=32)
+    restrictions: list[str] = Field(default_factory=list, max_length=32)
+    forbidden_technique_ids: list[str] = Field(default_factory=list, max_length=200)
+    forbidden_tactics: list[str] = Field(default_factory=list, max_length=32)
+    provided_access: list[str] = Field(default_factory=list, max_length=32)
+    time_budget_hours: float | None = Field(default=None, ge=0, le=100000)
+    emulate_adversary: str | None = Field(default=None, max_length=64)
+    objective_note: str | None = _LONG
+
+
+@app.get("/api/engagement-templates")
+def list_templates(user: dict = Depends(auth.current_user)):
+    from .templates_builtin import BUILTIN_TEMPLATES
+    return {"templates": list(BUILTIN_TEMPLATES) + db.list_templates(user["org_id"])}
+
+
+@app.post("/api/engagement-templates", status_code=201)
+def create_template(body: TemplateIn, request: Request,
+                    user: dict = Depends(auth.require_role("operator"))):
+    t = db.create_template(user["org_id"], user["id"], body.model_dump())
+    db.audit("template_create", actor_id=user["id"], org_id=user["org_id"],
+             target_id=t["id"], ip=getattr(request.state, "client_ip", None))
+    return t
+
+
+@app.put("/api/engagement-templates/{tid}")
+def update_template(tid: str, body: TemplateIn, request: Request,
+                    user: dict = Depends(auth.require_role("operator"))):
+    if tid.startswith("builtin:"):
+        raise HTTPException(status_code=400, detail="Built-in templates cannot be edited")
+    t = db.update_template(tid, user["org_id"], body.model_dump())
+    if not t:
+        raise HTTPException(status_code=404, detail="Template not found")
+    db.audit("template_update", actor_id=user["id"], org_id=user["org_id"],
+             target_id=tid, ip=getattr(request.state, "client_ip", None))
+    return t
+
+
+@app.delete("/api/engagement-templates/{tid}", status_code=204)
+def delete_template(tid: str, request: Request,
+                    user: dict = Depends(auth.require_role("operator"))):
+    if tid.startswith("builtin:"):
+        raise HTTPException(status_code=400, detail="Built-in templates cannot be deleted")
+    if not db.delete_template(tid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Template not found")
+    db.audit("template_delete", actor_id=user["id"], org_id=user["org_id"],
+             target_id=tid, ip=getattr(request.state, "client_ip", None))
+    return Response(status_code=204)
+
+
 # ── Findings (auth + tenancy + roles) ────────────────────────────
 
 def _validate_finding_enums(severity: str | None, status: str | None) -> None:

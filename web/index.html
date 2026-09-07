@@ -652,6 +652,15 @@ button{font-family:inherit}
 .brand-actions{display:flex;gap:8px;align-items:center;margin-top:6px}
 .brand-note{font-size:12px;color:var(--ink-faint)}
 
+/* ── Engagement templates bar ────────────────────────────────── */
+.tmpl-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;
+  border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
+.tmpl-lbl{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+.tmpl-bar select{padding:7px 9px;border:1px solid var(--line-strong);border-radius:7px;background:var(--field);
+  color:var(--ink);font-family:inherit;font-size:13.5px;min-width:210px}
+.tmpl-sep{flex:1}
+.tmpl-note{font-size:12px;color:var(--ink-faint);width:100%}
+
 /* ── Coverage heatmap ────────────────────────────────────────── */
 .heat-wrap{overflow-x:auto;padding:6px 0 10px}
 .heat{display:flex;gap:8px;align-items:flex-start;min-width:min-content}
@@ -845,6 +854,16 @@ button{font-family:inherit}
         <h1>Scope the engagement</h1>
         <p>Set out what the client authorized, like pieces on a map. Siege Tower turns it into a
            small set of ranked, ATT&amp;CK-mapped plans — then documents what your team actually does.</p>
+      </div>
+
+      <div class="tmpl-bar">
+        <span class="tmpl-lbl">Start from template</span>
+        <select id="tmplSelect"><option value="">— none —</option></select>
+        <button type="button" class="share-mini" id="tmplApply">Apply</button>
+        <span class="tmpl-sep"></span>
+        <button type="button" class="share-mini" id="tmplSave">Save current as template…</button>
+        <button type="button" class="share-mini" id="tmplDelete" hidden>Delete template</button>
+        <span class="tmpl-note" id="tmplNote"></span>
       </div>
 
       <div class="field-row">
