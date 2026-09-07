@@ -101,7 +101,7 @@ app = FastAPI(title="Siege Tower", version="0.2.0", lifespan=_lifespan)
 app.add_middleware(SecurityHeadersMiddleware, hsts=_BEHIND_TLS)
 app.add_middleware(
     BodySizeLimitMiddleware, max_bytes=_MAX_BODY_BYTES,
-    upload_prefixes=("/api/evidence",),
+    upload_prefixes=("/api/evidence", "/api/imports"),
     upload_max_bytes=evidence_store.MAX_EVIDENCE_BYTES + 1_048_576,  # + multipart overhead
 )
 
@@ -827,6 +827,47 @@ def save_finding_to_library(fid: str, request: Request,
     db.audit("library_create_from_finding", actor_id=user["id"], org_id=user["org_id"],
              target_id=item["id"], ip=getattr(request.state, "client_ip", None))
     return item
+
+
+# ── Scan import (Bulwark / SARIF → findings) ─────────────────────
+
+@app.post("/api/imports", status_code=201)
+async def import_scan(
+    request: Request,
+    file: UploadFile = File(...),
+    engagement_id: str = Form(...),
+    user: dict = Depends(auth.require_role("operator")),
+):
+    """Import a Bulwark scan result (native JSON) or a SARIF file as findings
+    under an engagement. A pure parse of the uploaded file — nothing is run."""
+    from . import importers
+    cap = evidence_store.MAX_EVIDENCE_BYTES
+    contents = await file.read(cap + 1)
+    if len(contents) > cap:
+        raise HTTPException(status_code=413, detail="Import file too large")
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if not db.get_engagement(engagement_id, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    import json as _json
+    try:
+        data = _json.loads(contents)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="File is not valid JSON")
+    try:
+        source, parsed = importers.parse(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    created = []
+    for fd in parsed:
+        f = db.create_finding(user["org_id"], user["id"], engagement_id,
+                              _finalize_finding(dict(fd)))
+        created.append({"id": f["id"], "title": f["title"], "severity": f.get("severity")})
+    db.audit("scan_import", actor_id=user["id"], org_id=user["org_id"],
+             target_id=engagement_id, ip=getattr(request.state, "client_ip", None),
+             detail=f"{source}: {len(created)} finding(s)")
+    return {"source": source, "imported": len(created), "findings": created}
 
 
 # ── Findings library ─────────────────────────────────────────────
