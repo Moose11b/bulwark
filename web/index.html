@@ -13,15 +13,15 @@
   color-scheme: light;
   /* Cartographic / topographic system — a survey chart on the drafting table:
      clean map paper, topographic ink, terracotta survey marks, teal annotation. */
-  --ground:#E4DECF;        /* chart margin — frames the field */
-  --ground-2:#D7CFBB;      /* recessed tracks / bar rails */
-  --surface:#F5F1E8;       /* map paper — panels & dossiers */
+  --ground:#DED6C0;        /* chart margin — deeper, so panels lift off it */
+  --ground-2:#D2C9B2;      /* recessed tracks / bar rails */
+  --surface:#F7F3EB;       /* map paper — panels & dossiers (brighter) */
   --surface-2:#ECE7DA;
-  --ink:#242A22;           /* topographic ink — near-black, faint green-slate cast */
-  --ink-soft:#4C5348;
-  --ink-faint:#828A7B;
-  --line:#D6CDB9;          /* hairline contour rule */
-  --line-strong:#BEB299;
+  --ink:#20261E;           /* topographic ink — near-black, faint green-slate cast */
+  --ink-soft:#464D42;
+  --ink-faint:#79806F;
+  --line:#CBBFA4;          /* hairline contour rule (more visible) */
+  --line-strong:#B4A788;
   --accent:#B0472C;        /* survey terracotta — the route / marker */
   --accent-deep:#8C3620;
   --accent-weak:#F0E1D6;   /* faint terracotta wash */
@@ -33,9 +33,10 @@
   --warn:#B08814;
   --crit:#9C2B1B;          /* deep survey red */
   --contour:rgba(62,107,114,.11);   /* topographic contour tint */
-  --paper-grid:rgba(36,42,34,.045); /* faint coordinate grid */
-  --shadow: 0 1px 2px rgba(36,42,34,.08), 0 10px 22px -14px rgba(36,42,34,.26);
-  --shadow-lift: 0 3px 6px rgba(36,42,34,.10), 0 22px 44px -20px rgba(36,42,34,.32);
+  --grid-minor:rgba(36,42,34,.07);  /* fine coordinate grid */
+  --grid-major:rgba(62,107,114,.20);/* survey grid — every 5th line */
+  --shadow: 0 1px 2px rgba(36,42,34,.11), 0 12px 26px -14px rgba(36,42,34,.34);
+  --shadow-lift: 0 3px 7px rgba(36,42,34,.14), 0 24px 48px -20px rgba(36,42,34,.40);
   --radius:10px; --radius-sm:7px;
   --maxw:1200px;
   --sans:"IBM Plex Sans", system-ui, -apple-system, sans-serif;
@@ -54,8 +55,10 @@ body{
    everything. Clean chart, not aged parchment — type stays crisp. */
 .map-bg{position:fixed; inset:0; z-index:0; pointer-events:none;
   background-image:
-    repeating-linear-gradient(0deg, transparent 0 39px, var(--paper-grid) 39px 40px),
-    repeating-linear-gradient(90deg, transparent 0 39px, var(--paper-grid) 39px 40px);}
+    repeating-linear-gradient(0deg, transparent 0 39px, var(--grid-minor) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--grid-minor) 39px 40px),
+    repeating-linear-gradient(0deg, transparent 0 199px, var(--grid-major) 199px 201px),
+    repeating-linear-gradient(90deg, transparent 0 199px, var(--grid-major) 199px 201px);}
 .map-bg svg{position:absolute; inset:0; width:100%; height:100%}
 .stains{display:none}
 .app,.topbar,.scrim{position:relative; z-index:1}
@@ -621,13 +624,13 @@ button{font-family:inherit}
 </style>
 
 <div class="map-bg" aria-hidden="true">
-  <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#3E6B72" stroke-opacity="0.13" stroke-width="1.1">
+  <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#3E6B72" stroke-opacity="0.22" stroke-width="1.35">
     <path d="M-20 210 C 220 150 420 250 640 200 S 1020 120 1240 190"/>
     <path d="M-20 250 C 220 195 430 295 650 245 S 1020 165 1240 235"/>
     <path d="M-20 560 C 260 500 460 610 700 560 S 1040 500 1240 560"/>
     <path d="M-20 600 C 260 545 470 650 710 600 S 1040 545 1240 600"/>
     <circle cx="880" cy="360" r="120"/><circle cx="880" cy="360" r="170"/><circle cx="880" cy="360" r="220"/>
-    <path d="M250 700 L 360 560 L 470 610 L 560 470" stroke="#B0472C" stroke-opacity="0.28" stroke-width="1.6" stroke-dasharray="2 6"/>
+    <path d="M250 700 L 360 560 L 470 610 L 560 470" stroke="#B0472C" stroke-opacity="0.5" stroke-width="2.2" stroke-dasharray="2 7"/>
   </svg>
 </div>
 <div class="stains" aria-hidden="true"></div>
