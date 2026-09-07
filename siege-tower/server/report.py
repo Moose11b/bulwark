@@ -96,6 +96,34 @@ def render_markdown(rep: dict) -> str:
     bo = rep["summary"]["by_outcome"]
     if bo:
         out.append(f"- **By outcome:** " + ", ".join(f"{_lbl(k)}: {v}" for k, v in sorted(bo.items())))
+    findings = rep.get("findings") or []
+    if findings:
+        order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
+        findings = sorted(findings, key=lambda f: (order.get(f.get("severity"), 5),
+                                                   str(f.get("title") or "")))
+        out += ["", "## Findings", ""]
+        for i, f in enumerate(findings, 1):
+            sev = _lbl(f.get("severity"))
+            cvss = f.get("cvss_score")
+            head = f"### {i}. {f.get('title') or 'Untitled'} — {sev}"
+            if cvss is not None:
+                head += f" (CVSS {cvss})"
+            out.append(head)
+            for label, key in (("Status", "status"), ("Affected assets", "affected_assets"),
+                               ("Description", "description"), ("Impact", "impact"),
+                               ("Reproduction", "reproduction"), ("Remediation", "remediation"),
+                               ("ATT&CK", "technique_ids"), ("References", "references")):
+                v = f.get(key)
+                if not v:
+                    continue
+                shown = _join(v) if isinstance(v, list) else v
+                out.append(f"- **{label}:** {shown}")
+            ev = f.get("evidence") or []
+            if ev:
+                out.append("- **Evidence:** " + _join(
+                    [f"{e.get('filename','?')} (sha256 {str(e.get('sha256',''))[:12]}…)" for e in ev]))
+            out.append("")
+
     out += ["", "## Execution log", ""]
     if not rep["steps"]:
         out.append("_No steps documented._")

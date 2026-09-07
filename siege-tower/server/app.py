@@ -592,15 +592,50 @@ def purge_engagement(eid: str, request: Request,
     return Response(status_code=204)
 
 
-@app.get("/api/engagements/{eid}/report")
-def engagement_report(eid: str, format: str = "json",
-                      user: dict = Depends(auth.current_user)):
-    e = db.get_engagement(eid, user["org_id"])
+def _assemble_report(eid: str, org_id: str) -> dict:
+    e = db.get_engagement(eid, org_id)
     if not e:
         raise HTTPException(status_code=404, detail="Engagement not found")
     rep = build_report(e, _pb_map())
+    # Attach findings (with resolved evidence metadata) and org branding.
+    findings = db.list_findings(org_id, engagement_id=eid)
+    for f in findings:
+        ev = []
+        for evid in (f.get("evidence_ids") or []):
+            meta = db.get_evidence(evid, org_id)
+            if meta:
+                ev.append({"filename": meta["filename"], "sha256": meta["sha256"],
+                           "size": meta["size"]})
+        f["evidence"] = ev
+    rep["findings"] = findings
+    org = db.get_org(org_id)
+    rep["org_name"] = org["name"] if org else None
+    return rep
+
+
+@app.get("/api/engagements/{eid}/report")
+def engagement_report(eid: str, format: str = "json",
+                      user: dict = Depends(auth.current_user)):
+    rep = _assemble_report(eid, user["org_id"])
+    name = (rep["engagement"].get("name") or "engagement").replace('"', "").replace("\n", "")
+
     if format == "markdown":
         return Response(content=render_markdown(rep), media_type="text/markdown")
+    if format == "docx":
+        from . import report_export
+        data = report_export.to_docx(rep)
+        return Response(
+            content=data,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{name}.docx"'},
+        )
+    if format == "pdf":
+        from . import report_export
+        data = report_export.to_pdf(rep)
+        return Response(content=data, media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+    if format != "json":
+        raise HTTPException(status_code=400, detail="Unsupported format")
     return rep
 
 

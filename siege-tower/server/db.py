@@ -160,6 +160,12 @@ def create_org(name: str) -> dict:
     return {"id": oid, "name": name, "created_at": now}
 
 
+def get_org(org_id: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute("SELECT * FROM orgs WHERE id=?", (org_id,)).fetchone()
+    return {"id": row["id"], "name": row["name"], "created_at": row["created_at"]} if row else None
+
+
 def count_users() -> int:
     with _conn() as c:
         return c.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
