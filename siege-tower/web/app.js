@@ -512,6 +512,38 @@ function loadEngagement(h){
 }
 
 /* ── Report ───────────────────────────────────────────────────── */
+/* ── Coverage heatmap (tactic columns × techniques, by outcome) ── */
+const TACTIC_ORDER=['reconnaissance','resource-development','initial-access','execution',
+  'persistence','privilege-escalation','defense-evasion','credential-access','discovery',
+  'lateral-movement','collection','command-and-control','exfiltration','impact'];
+function ocClass(oc){
+  if(oc==='succeeded'||oc==='fell_back') return 'hc-worked';
+  if(oc==='failed'||oc==='blocked') return 'hc-failed';
+  if(oc==='attempted') return 'hc-attempted';
+  if(oc==='skipped') return 'hc-skipped';
+  return 'hc-planned';
+}
+function heatmapHTML(cells){
+  // cells: [{technique_id, tactic, name, outcome}]
+  if(!cells.length) return '<div class="roadmap-empty">No techniques to map yet.</div>';
+  const byTactic={};
+  cells.forEach(c=>{ (byTactic[c.tactic]=byTactic[c.tactic]||[]).push(c); });
+  const order=TACTIC_ORDER.filter(t=>byTactic[t]);
+  Object.keys(byTactic).forEach(t=>{ if(!order.includes(t)) order.push(t); });
+  const cols=order.map(t=>{
+    const col=TACTIC_COLOR[t]||'#8A6D3B';
+    const chips=byTactic[t].map(c=>`<div class="heat-cell ${ocClass(c.outcome)}" title="${esc(c.name||c.technique_id)} — ${esc((c.outcome||'planned').replace(/_/g,' '))}">
+        <span class="hc-tid">${esc(c.technique_id)}</span></div>`).join('');
+    return `<div class="heat-col"><div class="heat-th" style="border-bottom-color:${col}">${esc(TACTIC_LABEL[t]||t)} <span>${byTactic[t].length}</span></div>${chips}</div>`;
+  }).join('');
+  return `<div class="heat-wrap"><div class="heat">${cols}</div></div>`;
+}
+function reportHeatmap(){
+  const cells=state.plan.map(s=>{ const p=PB[s.tid]||{}; return {
+    technique_id:p.technique_id||s.tid, tactic:p.tactic, name:p.name, outcome:outcomeOf(s.uid)}; });
+  return heatmapHTML(cells);
+}
+
 /* ── Attack-path roadmap (dots + arrows through the successful path) ── */
 const OC_STYLE={
   succeeded:{fill:true, badge:'✓', worked:true},
@@ -576,6 +608,14 @@ function openReport(){
       <span><i class="lg-dot skipped"></i>Skipped / not started</span>
     </div>
     ${roadmapSVG()}
+    <h3>Coverage heatmap</h3>
+    <div class="roadmap-legend">
+      <span><i class="lg-dot worked"></i>Worked</span>
+      <span><i class="lg-dot failed"></i>Failed / blocked</span>
+      <span><i class="lg-dot skipped"></i>Skipped / planned</span>
+      <span style="color:var(--ink-faint)">columns = ATT&CK tactics</span>
+    </div>
+    ${reportHeatmap()}
     <h3>Overview</h3>
     <div class="rgrid">
       <div class="ri"><div class="rk">Engagement</div><div class="rv">${esc($('#fName').value)||'—'}</div></div>
