@@ -3,6 +3,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Spectral:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
+/* Hidden attribute must always win, even over display:flex containers. */
+[hidden]{display:none!important}
 /* ── Siege Tower — the commander's campaign map ───────────────────
    A light, battle-worn war-room table: aged parchment, sepia ink, a
    commander's-red route accent, faded steel-blue, brass wax seals.
@@ -539,6 +541,46 @@ button{font-family:inherit}
 .exec-nav .spacer{margin-left:auto}
 
 @media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important}}
+/* ── Findings manager ────────────────────────────────────────── */
+.modal-wide{max-width:1080px;width:96vw}
+.find-layout{display:grid;grid-template-columns:260px 1fr;gap:0;min-height:60vh;max-height:74vh}
+.find-side{border-right:1px solid var(--rule,#D9C4A0);display:flex;flex-direction:column;overflow:hidden}
+.find-side-actions{display:flex;gap:8px;padding:12px}
+.find-side-actions .btn{flex:1;padding:8px;font-size:13px}
+.find-items{overflow-y:auto;padding:0 8px 12px}
+.find-item{padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.find-item:hover{background:#F2EAD8}.find-item.sel{background:#EFE3CC;border-color:#C9B78F}
+.find-item h4{margin:0 0 3px;font-family:Fraunces,Georgia,serif;font-size:13.5px;color:#2C2417}
+.find-item .fi-meta{display:flex;gap:6px;align-items:center}
+.sev-chip{font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;color:#fff}
+.sev-critical{background:#9C1F17}.sev-high{background:#C0392B}.sev-medium{background:#B9770E}
+.sev-low{background:#1E7A46}.sev-informational{background:#3C5A6B}.sev-none{background:#7C6A55}
+.st-chip{font-size:10.5px;color:#6B5B41}
+.find-editor{overflow-y:auto;padding:16px 20px}
+.find-editor .fe-empty{color:var(--ink-faint);font-size:14px;padding:30px 6px}
+.fe-row{display:flex;gap:12px;flex-wrap:wrap}
+.fe-field{margin:0 0 12px;flex:1;min-width:180px}
+.fe-field label{display:block;font-size:12px;font-weight:600;color:#5B5138;margin-bottom:4px}
+.fe-field input,.fe-field select,.fe-field textarea{width:100%;box-sizing:border-box;padding:8px 10px;
+  border:1px solid #C9B78F;border-radius:7px;background:#FCF8EE;font-family:inherit;font-size:13.5px;color:#2C2417}
+.fe-field textarea{resize:vertical;min-height:54px}
+.fe-cvss-out{font-size:12.5px;font-weight:600;margin-top:4px}
+.fe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;padding-top:12px;border-top:1px solid #E4D6B8}
+.fe-actions .btn{font-size:13px;padding:8px 12px}
+.fe-note{font-size:12px;color:var(--ink-faint);align-self:center}
+.ev-list{display:flex;flex-direction:column;gap:5px;margin:6px 0}
+.ev-row{display:flex;align-items:center;gap:8px;font-size:12.5px;background:#F2EAD8;border-radius:6px;padding:5px 9px}
+.ev-row .ev-name{flex:1;font-family:IBM Plex Mono,monospace;font-size:12px}
+.ev-row button{border:none;background:none;color:#7C2A20;cursor:pointer;font-size:12px;font-weight:600}
+
+/* ── Report download buttons ─────────────────────────────────── */
+.rep-dl{display:flex;align-items:center;gap:7px;margin-left:auto;margin-right:10px;flex-wrap:wrap}
+.rep-dl-lbl{font-size:12px;color:var(--ink-faint);font-family:IBM Plex Mono,monospace}
+.dl-btn{padding:5px 11px;border:1px solid #C9B78F;border-radius:7px;background:#F6F0E1;color:#7C2A20;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.dl-btn:hover{background:#EFE7D3}.dl-btn:disabled{opacity:.5;cursor:default}
+.rep-dl-note{font-size:11.5px;color:var(--ink-faint)}
+
 /* ── Follow-ups on a failed step ─────────────────────────────── */
 .followups{margin-top:16px;padding:16px;border:1px solid #C9A99A;border-radius:12px;
   background:linear-gradient(180deg,#FBEDE8,#F7E7E0)}
@@ -850,6 +892,9 @@ button{font-family:inherit}
         <button class="btn btn-ghost" id="saveBtn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
           Save</button>
+        <button class="btn btn-ghost" id="findingsBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Findings</button>
         <button class="btn btn-primary" id="reportBtn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3h8l4 4v14H4V3z"/><path d="M8 12h8M8 16h5"/></svg>
           Field report</button>
@@ -863,10 +908,39 @@ button{font-family:inherit}
     <div class="modal-head">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9C3B2E" stroke-width="2"><path d="M8 3h8l4 4v14H4V3z"/><path d="M8 12h8M8 16h5"/></svg>
       <h2 id="repHeading">Field report</h2>
+      <div class="rep-dl" id="repDownloads">
+        <span class="rep-dl-lbl">Download:</span>
+        <button type="button" class="dl-btn" data-fmt="markdown">Markdown</button>
+        <button type="button" class="dl-btn" data-fmt="docx">DOCX</button>
+        <button type="button" class="dl-btn" data-fmt="pdf">PDF</button>
+        <span class="rep-dl-note" id="repDlNote"></span>
+      </div>
       <button class="x" id="repClose" aria-label="Close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="report" id="reportBody"></div>
   </div>
 </div>
+
+<div class="scrim" id="findScrim">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="findHeading">
+    <div class="modal-head">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9C3B2E" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <h2 id="findHeading">Findings</h2>
+      <button class="x" id="findClose" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="find-layout">
+      <aside class="find-side">
+        <div class="find-side-actions">
+          <button type="button" class="btn btn-primary" id="findNew">+ New</button>
+          <button type="button" class="btn btn-ghost" id="findFromLib">From library</button>
+        </div>
+        <div class="find-items" id="findItems"></div>
+      </aside>
+      <section class="find-editor" id="findEditor"></section>
+    </div>
+  </div>
+</div>
+
 <script src="/app.js" defer></script>
