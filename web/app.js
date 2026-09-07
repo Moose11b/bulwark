@@ -512,6 +512,50 @@ function loadEngagement(h){
 }
 
 /* ── Report ───────────────────────────────────────────────────── */
+/* ── Attack-path roadmap (dots + arrows through the successful path) ── */
+const OC_STYLE={
+  succeeded:{fill:true, badge:'✓', worked:true},
+  fell_back:{fill:true, badge:'↺', worked:true},
+  failed:{fill:false, badge:'✕', danger:true},
+  blocked:{fill:false, badge:'✕', danger:true},
+  skipped:{fill:false, badge:'–', faint:true},
+  not_started:{fill:false, badge:'', faint:true},
+};
+function roadmapSVG(){
+  const steps=state.plan; if(!steps.length) return '<div class="roadmap-empty">No steps to map yet.</div>';
+  const cs=getComputedStyle(document.documentElement);
+  const C=k=>cs.getPropertyValue(k).trim();
+  const SURFACE=C('--surface'), INK=C('--ink'), FAINT=C('--ink-faint'),
+        ACCENT=C('--accent'), CRIT=C('--crit'), LINE=C('--line-strong');
+  const gap=122, mx=26, r=19, cy=46, H=118;
+  const W=mx*2 + (steps.length-1)*gap + r*2;
+  let arrows='', nodes='';
+  steps.forEach((s,i)=>{
+    const p=PB[s.tid]||{}; const oc=outcomeOf(s.uid)||'not_started';
+    const st=OC_STYLE[oc]||OC_STYLE.not_started;
+    const cx=mx+r+i*gap; const col=TACTIC_COLOR[p.tactic]||'#8A6D3B';
+    const ring=st.danger?CRIT:(st.faint?LINE:col);
+    const fill=st.fill?col:SURFACE;
+    const tcol=st.fill?'#F6EFE6':INK;
+    if(i<steps.length-1){
+      const x1=cx+r, x2=mx+r+(i+1)*gap-r;
+      arrows+=`<line x1="${x1}" y1="${cy}" x2="${x2-4}" y2="${cy}" stroke="${st.worked?ACCENT:FAINT}" `
+        +`stroke-width="${st.worked?2.2:1.3}" ${st.worked?'':'stroke-dasharray="3 4"'} `
+        +`marker-end="url(#${st.worked?'rmA':'rmF'})" opacity="${st.worked?1:.75}"/>`;
+    }
+    nodes+=`<g><circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${ring}" stroke-width="2.4" `
+      +`${st.faint?'stroke-dasharray="3 3"':''}/>`
+      +`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="12" font-weight="600" fill="${tcol}">${i+1}</text>`
+      +(st.badge?`<text x="${cx+r-3}" y="${cy-r+7}" text-anchor="middle" font-size="11" fill="${st.danger?CRIT:ACCENT}">${st.badge}</text>`:'')
+      +`<text x="${cx}" y="${cy+r+15}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="${FAINT}">${esc(p.technique_id||s.tid)}</text>`
+      +`</g>`;
+  });
+  const defs=`<defs>`
+    +`<marker id="rmA" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="none" stroke="${ACCENT}" stroke-width="1.5"/></marker>`
+    +`<marker id="rmF" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="none" stroke="${FAINT}" stroke-width="1.3"/></marker></defs>`;
+  return `<div class="roadmap-wrap"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="roadmap" role="img" aria-label="Attack path roadmap">${defs}${arrows}${nodes}</svg></div>`;
+}
+
 function openReport(){
   const worked=state.plan.filter(s=>{const o=outcomeOf(s.uid); return o&&o!=='skipped';}).length;
   const pct=state.plan.length?Math.round(100*worked/state.plan.length):0;
@@ -525,6 +569,13 @@ function openReport(){
   const rests=[...state.restrictions].map(titleCase).join(', ')||'None';
   const tacts=new Set(state.plan.map(s=>PB[s.tid]&&PB[s.tid].tactic)); tacts.delete(undefined);
   $('#reportBody').innerHTML=`
+    <h3>Attack path</h3>
+    <div class="roadmap-legend">
+      <span><i class="lg-dot worked"></i>Worked (solid = path to objective)</span>
+      <span><i class="lg-dot failed"></i>Failed / blocked</span>
+      <span><i class="lg-dot skipped"></i>Skipped / not started</span>
+    </div>
+    ${roadmapSVG()}
     <h3>Overview</h3>
     <div class="rgrid">
       <div class="ri"><div class="rk">Engagement</div><div class="rv">${esc($('#fName').value)||'—'}</div></div>

@@ -623,6 +623,17 @@ button{font-family:inherit}
   font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
 .logout-btn:hover{background:var(--surface-2)}
 
+/* ── Attack-path roadmap ─────────────────────────────────────── */
+.roadmap-wrap{overflow-x:auto;padding:6px 0 10px}
+.roadmap{display:block}
+.roadmap-empty{color:var(--ink-faint);font-size:13px;padding:8px 0}
+.roadmap-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);margin:2px 0 8px}
+.roadmap-legend span{display:inline-flex;align-items:center;gap:6px}
+.lg-dot{width:11px;height:11px;border-radius:50%;display:inline-block;border:2px solid var(--line-strong)}
+.lg-dot.worked{background:var(--accent);border-color:var(--accent)}
+.lg-dot.failed{background:transparent;border-color:var(--crit)}
+.lg-dot.skipped{background:transparent;border-color:var(--line-strong);border-style:dashed}
+
 /* ── Dark mode — charcoal survey chart ───────────────────────── */
 :root[data-theme="dark"]{
   color-scheme: dark;
