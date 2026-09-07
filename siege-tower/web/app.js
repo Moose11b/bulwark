@@ -1001,6 +1001,58 @@ $('#brandBtn').onclick=openBranding;
 $('#brandClose').onclick=closeBranding;
 $('#brandScrim').onclick=e=>{ if(e.target===$('#brandScrim')) closeBranding(); };
 
+/* ── Engagement templates ─────────────────────────────────────── */
+let TEMPLATES=[];
+async function loadTemplates(){
+  try{ TEMPLATES=((await (await api('/api/engagement-templates')).json()).templates)||[]; }catch(e){ TEMPLATES=[]; }
+  const sel=$('#tmplSelect'); if(!sel) return;
+  sel.innerHTML='<option value="">— none —</option>'+TEMPLATES.map(t=>{
+    const tag=t.builtin?' (built-in)':'';
+    return `<option value="${esc(t.id)}">${esc(t.name)}${tag}</option>`;
+  }).join('');
+  updateTmplButtons();
+}
+function updateTmplButtons(){
+  const sel=$('#tmplSelect'); const t=TEMPLATES.find(x=>x.id===sel.value);
+  const del=$('#tmplDelete'); if(del) del.hidden = !(t && !t.builtin);
+}
+function applyTemplate(){
+  const t=TEMPLATES.find(x=>x.id===$('#tmplSelect').value);
+  const note=$('#tmplNote'); if(!t){ if(note) note.textContent='Pick a template first.'; return; }
+  if(t.objective) state.objective=t.objective;
+  if(t.box_type) state.box=t.box_type;
+  state.platforms=new Set(t.scope_platforms||[]);
+  state.restrictions=new Set(t.restrictions||[]);
+  if(t.time_budget_hours!=null){ const b=$('#fBudget'); if(b) b.value=t.time_budget_hours; }
+  buildIntake(); syncChips();
+  if(note) note.textContent='Applied “'+t.name+'”. Adjust anything, then generate plans.';
+}
+async function saveTemplate(){
+  const note=$('#tmplNote');
+  const name=prompt('Template name:', 'My engagement preset'); if(!name) return;
+  const description=prompt('Short description (optional):','')||null;
+  const budget=parseFloat($('#fBudget').value);
+  const body={ name, description, objective:state.objective, box_type:state.box,
+    scope_platforms:[...state.platforms], restrictions:[...state.restrictions],
+    time_budget_hours: isNaN(budget)?null:budget };
+  try{ const r=await api('/api/engagement-templates',{method:'POST',body:JSON.stringify(body)});
+    if(!r.ok){ if(note) note.textContent='Save failed.'; return; }
+    const t=await r.json(); await loadTemplates(); $('#tmplSelect').value=t.id; updateTmplButtons();
+    if(note) note.textContent='Saved template “'+name+'”.';
+  }catch(e){ if(note) note.textContent='Save failed.'; }
+}
+async function deleteTemplate(){
+  const sel=$('#tmplSelect'); const t=TEMPLATES.find(x=>x.id===sel.value);
+  if(!t || t.builtin) return;
+  if(!confirm('Delete template “'+t.name+'”?')) return;
+  try{ await api('/api/engagement-templates/'+t.id,{method:'DELETE'}); }catch(e){}
+  await loadTemplates();
+}
+if($('#tmplApply')) $('#tmplApply').onclick=applyTemplate;
+if($('#tmplSave')) $('#tmplSave').onclick=saveTemplate;
+if($('#tmplDelete')) $('#tmplDelete').onclick=deleteTemplate;
+if($('#tmplSelect')) $('#tmplSelect').onchange=updateTmplButtons;
+
 /* ── Login ────────────────────────────────────────────────────── */
 function showLogin(msg){
   const ov=$('#loginOverlay'); if(!ov) return;
@@ -1122,7 +1174,7 @@ async function startApp(){
   for(const k in PB) delete PB[k];
   (SIEGE.playbook||[]).forEach(p => PB[p.technique_id] = p);
   hideLogin();
-  buildIntake(); syncChips(); initBoardDnD(); renderHistory(); refreshUserChip(); go('home');
+  buildIntake(); syncChips(); initBoardDnD(); renderHistory(); refreshUserChip(); loadTemplates(); go('home');
 }
 
 async function boot(){
