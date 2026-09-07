@@ -93,6 +93,25 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 deleted_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS findings (
+                id TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+                engagement_id TEXT REFERENCES engagements(id) ON DELETE CASCADE,
+                created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                data TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS finding_library (
+                id TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+                created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                data TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT
+            );
             CREATE TABLE IF NOT EXISTS audit_log (
                 id TEXT PRIMARY KEY,
                 ts TEXT NOT NULL,
@@ -104,6 +123,9 @@ def init_db() -> None:
                 detail TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_eng_org ON engagements(org_id);
+            CREATE INDEX IF NOT EXISTS idx_find_org ON findings(org_id);
+            CREATE INDEX IF NOT EXISTS idx_find_eng ON findings(engagement_id);
+            CREATE INDEX IF NOT EXISTS idx_lib_org ON finding_library(org_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
             """
@@ -338,6 +360,143 @@ def list_engagements(org_id: str) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
             "SELECT data FROM engagements WHERE org_id=? AND deleted_at IS NULL "
+            "ORDER BY updated_at DESC",
+            (org_id,),
+        ).fetchall()
+    return [_decode(r["data"]) for r in rows]
+
+
+# ── Findings (tenant-scoped, encrypted, soft-deleted) ────────────
+
+def create_finding(org_id: str, created_by: str, engagement_id: str | None,
+                   data: dict) -> dict:
+    fid = _new_id()
+    now = _now()
+    body = {k: v for k, v in data.items()
+            if k not in ("id", "created_at", "updated_at", "org_id", "created_by",
+                         "engagement_id")}
+    body = {**body, "id": fid, "engagement_id": engagement_id,
+            "created_at": now, "updated_at": now}
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO findings
+               (id, org_id, engagement_id, created_by, data, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (fid, org_id, engagement_id, created_by, _encode(body), now, now),
+        )
+    return body
+
+
+def get_finding(fid: str, org_id: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT data FROM findings WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (fid, org_id),
+        ).fetchone()
+    return _decode(row["data"]) if row else None
+
+
+def update_finding(fid: str, org_id: str, data: dict) -> dict | None:
+    existing = get_finding(fid, org_id)
+    if not existing:
+        return None
+    now = _now()
+    incoming = {k: v for k, v in data.items()
+                if k not in ("id", "created_at", "org_id", "created_by")}
+    merged = {**existing, **incoming, "id": fid,
+              "created_at": existing.get("created_at", now), "updated_at": now}
+    new_eid = merged.get("engagement_id")
+    with _conn() as c:
+        c.execute(
+            "UPDATE findings SET data=?, engagement_id=?, updated_at=? WHERE id=? AND org_id=?",
+            (_encode(merged), new_eid, now, fid, org_id),
+        )
+    return merged
+
+
+def delete_finding(fid: str, org_id: str) -> bool:
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE findings SET deleted_at=? WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (_now(), fid, org_id),
+        )
+        return cur.rowcount > 0
+
+
+def list_findings(org_id: str, engagement_id: str | None = None) -> list[dict]:
+    with _conn() as c:
+        if engagement_id is not None:
+            rows = c.execute(
+                "SELECT data FROM findings WHERE org_id=? AND engagement_id=? "
+                "AND deleted_at IS NULL ORDER BY updated_at DESC",
+                (org_id, engagement_id),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT data FROM findings WHERE org_id=? AND deleted_at IS NULL "
+                "ORDER BY updated_at DESC",
+                (org_id,),
+            ).fetchall()
+    return [_decode(r["data"]) for r in rows]
+
+
+# ── Findings library (reusable writeup templates) ────────────────
+
+def create_library_item(org_id: str, created_by: str, data: dict) -> dict:
+    lid = _new_id()
+    now = _now()
+    body = {k: v for k, v in data.items()
+            if k not in ("id", "created_at", "updated_at", "org_id", "created_by")}
+    body = {**body, "id": lid, "created_at": now, "updated_at": now}
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO finding_library
+               (id, org_id, created_by, data, created_at, updated_at)
+               VALUES (?,?,?,?,?,?)""",
+            (lid, org_id, created_by, _encode(body), now, now),
+        )
+    return body
+
+
+def get_library_item(lid: str, org_id: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT data FROM finding_library WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (lid, org_id),
+        ).fetchone()
+    return _decode(row["data"]) if row else None
+
+
+def update_library_item(lid: str, org_id: str, data: dict) -> dict | None:
+    existing = get_library_item(lid, org_id)
+    if not existing:
+        return None
+    now = _now()
+    incoming = {k: v for k, v in data.items()
+                if k not in ("id", "created_at", "org_id", "created_by")}
+    merged = {**existing, **incoming, "id": lid,
+              "created_at": existing.get("created_at", now), "updated_at": now}
+    with _conn() as c:
+        c.execute(
+            "UPDATE finding_library SET data=?, updated_at=? WHERE id=? AND org_id=?",
+            (_encode(merged), now, lid, org_id),
+        )
+    return merged
+
+
+def delete_library_item(lid: str, org_id: str) -> bool:
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE finding_library SET deleted_at=? WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (_now(), lid, org_id),
+        )
+        return cur.rowcount > 0
+
+
+def list_library(org_id: str) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT data FROM finding_library WHERE org_id=? AND deleted_at IS NULL "
             "ORDER BY updated_at DESC",
             (org_id,),
         ).fetchall()
