@@ -49,6 +49,8 @@ app is usable but never open:
 | `SIEGE_ALLOW_INSECURE` | Set to `1` to allow a non-loopback bind without TLS (trusted networks only). | *(unset)* |
 | `SIEGE_TRUST_PROXY` | Set to `1` to trust `X-Forwarded-For` for client IP (only behind a known proxy). | *(unset)* |
 | `SIEGE_DB` | SQLite path. | `siege.db` next to the app |
+| `SIEGE_EVIDENCE_DIR` | Directory for uploaded evidence files (encrypted at rest, 0600). | `evidence_store/` next to the app |
+| `SIEGE_MAX_EVIDENCE_BYTES` | Max size of a single evidence upload. | `26214400` (25 MiB) |
 
 ## Deployment checklist
 

@@ -17,8 +17,8 @@ dependencies = []
 
 [project.optional-dependencies]
 # The server extra adds the web app and at-rest encryption (cryptography).
-server = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "cryptography>=42.0"]
-dev = ["pytest>=8.0", "httpx>=0.27", "fastapi>=0.110", "uvicorn[standard]>=0.29", "cryptography>=42.0"]
+server = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "cryptography>=42.0", "python-multipart>=0.0.9"]
+dev = ["pytest>=8.0", "httpx>=0.27", "fastapi>=0.110", "uvicorn[standard]>=0.29", "cryptography>=42.0", "python-multipart>=0.0.9"]
 
 [project.scripts]
 siege-tower = "siege_tower.cli:main"

@@ -12,3 +12,6 @@ siege.db
 *.sqlite
 *.sqlite3
 .DS_Store
+
+# Local evidence file store (never commit engagement evidence)
+evidence_store/

@@ -112,6 +112,19 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 deleted_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS evidence (
+                id TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+                engagement_id TEXT REFERENCES engagements(id) ON DELETE CASCADE,
+                finding_id TEXT REFERENCES findings(id) ON DELETE CASCADE,
+                uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+                meta TEXT NOT NULL,
+                content_type TEXT,
+                size INTEGER NOT NULL,
+                sha256 TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                deleted_at TEXT
+            );
             CREATE TABLE IF NOT EXISTS audit_log (
                 id TEXT PRIMARY KEY,
                 ts TEXT NOT NULL,
@@ -126,6 +139,9 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_find_org ON findings(org_id);
             CREATE INDEX IF NOT EXISTS idx_find_eng ON findings(engagement_id);
             CREATE INDEX IF NOT EXISTS idx_lib_org ON finding_library(org_id);
+            CREATE INDEX IF NOT EXISTS idx_ev_org ON evidence(org_id);
+            CREATE INDEX IF NOT EXISTS idx_ev_eng ON evidence(engagement_id);
+            CREATE INDEX IF NOT EXISTS idx_ev_find ON evidence(finding_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
             """
@@ -501,6 +517,83 @@ def list_library(org_id: str) -> list[dict]:
             (org_id,),
         ).fetchall()
     return [_decode(r["data"]) for r in rows]
+
+
+# ── Evidence (metadata; file bytes live in evidence_store) ───────
+
+def _evidence_row(row: sqlite3.Row | None) -> dict | None:
+    if not row:
+        return None
+    meta = json.loads(_ENC.decrypt(row["meta"]))
+    return {
+        "id": row["id"], "org_id": row["org_id"],
+        "engagement_id": row["engagement_id"], "finding_id": row["finding_id"],
+        "uploaded_by": row["uploaded_by"], "filename": meta.get("filename"),
+        "content_type": row["content_type"], "size": row["size"],
+        "sha256": row["sha256"], "created_at": row["created_at"],
+    }
+
+
+def create_evidence(org_id: str, uploaded_by: str, filename: str,
+                    content_type: str | None, size: int, sha256: str,
+                    engagement_id: str | None = None,
+                    finding_id: str | None = None) -> dict:
+    eid = _new_id()
+    now = _now()
+    meta = _ENC.encrypt(json.dumps({"filename": filename}))
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO evidence
+               (id, org_id, engagement_id, finding_id, uploaded_by, meta,
+                content_type, size, sha256, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (eid, org_id, engagement_id, finding_id, uploaded_by, meta,
+             content_type, size, sha256, now),
+        )
+    return {
+        "id": eid, "org_id": org_id, "engagement_id": engagement_id,
+        "finding_id": finding_id, "uploaded_by": uploaded_by, "filename": filename,
+        "content_type": content_type, "size": size, "sha256": sha256,
+        "created_at": now,
+    }
+
+
+def get_evidence(eid: str, org_id: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM evidence WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (eid, org_id),
+        ).fetchone()
+    return _evidence_row(row)
+
+
+def list_evidence(org_id: str, engagement_id: str | None = None,
+                  finding_id: str | None = None) -> list[dict]:
+    q = "SELECT * FROM evidence WHERE org_id=? AND deleted_at IS NULL"
+    params: list = [org_id]
+    if engagement_id is not None:
+        q += " AND engagement_id=?"; params.append(engagement_id)
+    if finding_id is not None:
+        q += " AND finding_id=?"; params.append(finding_id)
+    q += " ORDER BY created_at DESC"
+    with _conn() as c:
+        rows = c.execute(q, params).fetchall()
+    return [_evidence_row(r) for r in rows]
+
+
+def delete_evidence(eid: str, org_id: str) -> bool:
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE evidence SET deleted_at=? WHERE id=? AND org_id=? AND deleted_at IS NULL",
+            (_now(), eid, org_id),
+        )
+        return cur.rowcount > 0
+
+
+def purge_evidence(eid: str, org_id: str) -> bool:
+    with _conn() as c:
+        cur = c.execute("DELETE FROM evidence WHERE id=? AND org_id=?", (eid, org_id))
+        return cur.rowcount > 0
 
 
 # ── Audit log ────────────────────────────────────────────────────

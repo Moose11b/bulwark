@@ -22,10 +22,14 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import (
+    Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile,
+)
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from . import evidence_store
 
 import dataclasses
 
@@ -94,7 +98,11 @@ async def _lifespan(app: "FastAPI"):
 
 app = FastAPI(title="Siege Tower", version="0.2.0", lifespan=_lifespan)
 app.add_middleware(SecurityHeadersMiddleware, hsts=_BEHIND_TLS)
-app.add_middleware(BodySizeLimitMiddleware, max_bytes=_MAX_BODY_BYTES)
+app.add_middleware(
+    BodySizeLimitMiddleware, max_bytes=_MAX_BODY_BYTES,
+    upload_prefixes=("/api/evidence",),
+    upload_max_bytes=evidence_store.MAX_EVIDENCE_BYTES + 1_048_576,  # + multipart overhead
+)
 
 
 @app.middleware("http")
@@ -752,6 +760,115 @@ def instantiate_from_library(lid: str, request: Request,
     db.audit("finding_from_library", actor_id=user["id"], org_id=user["org_id"],
              target_id=f["id"], ip=getattr(request.state, "client_ip", None))
     return f
+
+
+# ── Evidence (upload / download, hashed, encrypted at rest) ──────
+
+def _safe_filename(name: str) -> str:
+    """Strip path and header-injection characters from a client filename."""
+    name = (name or "evidence").replace("\\", "/").split("/")[-1]
+    name = name.replace("\r", "").replace("\n", "").replace('"', "")
+    return name[:255] or "evidence"
+
+
+@app.get("/api/evidence")
+def list_evidence(engagement_id: str | None = None, finding_id: str | None = None,
+                  user: dict = Depends(auth.current_user)):
+    return {"evidence": db.list_evidence(user["org_id"], engagement_id, finding_id)}
+
+
+@app.post("/api/evidence", status_code=201)
+async def upload_evidence(
+    request: Request,
+    file: UploadFile = File(...),
+    engagement_id: str | None = Form(default=None),
+    finding_id: str | None = Form(default=None),
+    user: dict = Depends(auth.require_role("operator")),
+):
+    cap = evidence_store.MAX_EVIDENCE_BYTES
+    contents = await file.read(cap + 1)
+    if len(contents) > cap:
+        raise HTTPException(status_code=413, detail="Evidence file too large")
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if engagement_id and not db.get_engagement(engagement_id, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    if finding_id and not db.get_finding(finding_id, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Finding not found")
+
+    filename = _safe_filename(file.filename)
+    digest = evidence_store.sha256_hex(contents)
+    meta = db.create_evidence(
+        user["org_id"], user["id"], filename, file.content_type,
+        len(contents), digest, engagement_id, finding_id,
+    )
+    evidence_store.save(user["org_id"], meta["id"], contents)
+
+    # Link the evidence to the finding for one-click report assembly.
+    if finding_id:
+        f = db.get_finding(finding_id, user["org_id"])
+        if f is not None:
+            ev_ids = list(f.get("evidence_ids") or [])
+            if meta["id"] not in ev_ids:
+                ev_ids.append(meta["id"])
+                db.update_finding(finding_id, user["org_id"], {"evidence_ids": ev_ids})
+
+    db.audit("evidence_upload", actor_id=user["id"], org_id=user["org_id"],
+             target_id=meta["id"], ip=getattr(request.state, "client_ip", None),
+             detail=f"{filename} ({len(contents)} bytes, sha256={digest[:12]}…)")
+    return meta
+
+
+@app.get("/api/evidence/{eid}")
+def get_evidence(eid: str, user: dict = Depends(auth.current_user)):
+    meta = db.get_evidence(eid, user["org_id"])
+    if not meta:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    return meta
+
+
+@app.get("/api/evidence/{eid}/download")
+def download_evidence(eid: str, user: dict = Depends(auth.current_user)):
+    meta = db.get_evidence(eid, user["org_id"])
+    if not meta or not evidence_store.exists(user["org_id"], eid):
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    data = evidence_store.load(user["org_id"], eid)
+    # Integrity check against the recorded hash (chain-of-custody).
+    if evidence_store.sha256_hex(data) != meta["sha256"]:
+        raise HTTPException(status_code=500, detail="Evidence integrity check failed")
+    filename = _safe_filename(meta.get("filename") or eid)
+    # Always attachment + octet-stream so user-supplied content never renders
+    # inline in the browser (defence against stored HTML/script in evidence).
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.delete("/api/evidence/{eid}", status_code=204)
+def delete_evidence(eid: str, request: Request,
+                    user: dict = Depends(auth.require_role("operator"))):
+    if not db.delete_evidence(eid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    db.audit("evidence_delete", actor_id=user["id"], org_id=user["org_id"],
+             target_id=eid, ip=getattr(request.state, "client_ip", None))
+    return Response(status_code=204)
+
+
+@app.delete("/api/evidence/{eid}/purge", status_code=204)
+def purge_evidence(eid: str, request: Request,
+                   user: dict = Depends(auth.require_role("admin"))):
+    """Hard delete an evidence file (admin only) — removes bytes from disk."""
+    if not db.purge_evidence(eid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    evidence_store.remove(user["org_id"], eid)
+    db.audit("evidence_purge", actor_id=user["id"], org_id=user["org_id"],
+             target_id=eid, ip=getattr(request.state, "client_ip", None))
+    return Response(status_code=204)
 
 
 # Serve the web UI last, so it never shadows the /api routes above.
