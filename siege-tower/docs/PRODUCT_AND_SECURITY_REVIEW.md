@@ -13,6 +13,243 @@ This document has three parts:
 
 ---
 
+## Part 1 — Market: competitors, positioning, and the gap
+
+Siege Tower sits at the intersection of three markets usually sold separately:
+(1) pentest **engagement management & reporting**, (2) **ATT&CK-based attack
+planning / adversary emulation**, and (3) **offensive orchestration / C2**. The
+core finding: almost no incumbent spans planning + documentation + a scanner
+pairing in one product *without also executing exploits*. That un-served
+overlap is exactly where Siege Tower can win.
+
+### 1.1 Reporting / engagement-management platforms (Siege Tower's closest rivals)
+
+These own the "document the engagement and produce the report" job.
+
+- **PlexTrac** — market-leading commercial, AI-assisted "report as you test"
+  platform. Quote-based SaaS, widely seen as premium (deals commonly in the
+  tens of thousands/year). *Strengths:* best-in-class reporting UX, reusable
+  findings library (WriteupsDB), analytics, retest tracking, multi-scanner
+  consolidation. *Weaknesses:* **price is the #1 complaint** — prohibitive for
+  solos/small teams; integrations lag the core; overkill for one-person shops.
+- **AttackForge** — full-lifecycle management/reporting; enterprise workflow +
+  self-service. From ~$50/user/mo up to packaged $150–$800/mo; free Community
+  tier. *Strengths:* standardized test cases, auto-maps vulns into attack
+  paths, strong REST API, good value. *Weaknesses:* rapid-release churn, UI
+  less polished than PlexTrac, steeper initial setup.
+- **Dradis** — long-standing self-hosted collaboration + reporting. **CE free
+  (GPL)**; Pro $100–$149/user/mo. *Strengths:* mature scanner importers, Issue
+  Library + Rules Engine, data ownership. *Weaknesses:* dated UI, template
+  learning curve, per-user cost scales.
+- **PenTest.WS** — lightweight, solo-focused workspace (hosts/services/findings,
+  command templates). Cheap individual tiers (free Hobby + low Pro).
+  *Strengths:* fast and cheap for solo operators. *Weaknesses:* not built for
+  consultancy scale, light on portals/theming/integrations.
+- **Pentest Collaboration Framework (PCF)** — free/OSS team project management +
+  automation. *Strengths:* genuinely free Faraday/Dradis analog, Nmap/Nessus/
+  Nikto imports. *Weaknesses:* fragmented forks, thinner reporting, small
+  ecosystem.
+- **Reconmap** — OSS collaboration-first sec-ops platform; SaaS option.
+  *Strengths:* command automation + output parsing + AI summaries, DOCX/PDF/
+  XLSX/MD/HTML reports, **Model Context Protocol (LLM) support**. *Weaknesses:*
+  smaller community, self-host burden, thinner client-portal/compliance.
+- **Ghostwriter (SpecterOps)** — FOSS project-management + reporting engine.
+  *Strengths:* reusable findings library, RBAC/SSO/MFA, DOCX/XLSX/PPTX via
+  Jinja2, GraphQL API, Mythic/Cobalt Strike activity logging. *Weaknesses:*
+  red-team-op-centric, Jinja2/DOCX template learning curve, self-host ops.
+- **Cervantes (OWASP)** — free/OSS collaboration-first platform. *Strengths:*
+  real-time multi-user by design, dashboards, one-click reports, AI features,
+  JIRA. *Weaknesses:* younger project, smaller ecosystem, enterprise hardening
+  still maturing.
+- **Hexway (Hive/Pentest)** — on-prem workspace with a live client portal
+  ("Apiary"). Community free + Pentest tier ~$78/user/mo. *Strengths:*
+  collaborative workspace, live client portal, broad tool integrations.
+  *Weaknesses:* on-prem overhead, smaller North American footprint.
+- **Rootshell (Prism)** — vendor-agnostic vuln-management + offensive platform /
+  PTaaS. Quote-based, annual contracts. *Strengths:* single pane across
+  vendors, prioritization, ticketing. *Weaknesses:* enterprise sales motion,
+  more a client-side remediation hub than a tester's authoring tool.
+- **Astra (PTaaS)** — scanner + human pentest, per-target, client dashboard.
+  **Publicly priced**: scanner from $1,999/yr/target, manual pentest
+  $5,999/yr/target. *Strengths:* transparent pricing, scan+human+remediation,
+  compliance framing. *Weaknesses:* a service for *buyers* of pentests, not a
+  tester's tool; per-target cost scales.
+- **Cobalt.io (PtaaS)** — category-defining freelance-tester marketplace.
+  Credit-based; engagements start ~$8,500; first-year packages ~$65k–$90k.
+  *Strengths:* fast start, retest workflow, integrations. *Weaknesses:*
+  **confusing non-rolling credit model**, variable freelance depth, expensive.
+- **Sprocket** — expert-led *continuous* pentesting + portal. Quote-based
+  subscription. *Strengths:* continuous coverage, real-time portal.
+  *Weaknesses:* managed service (you buy their testers), not for independents.
+- **Adjacent tooling worth benchmarking:** **Faraday** (OSS + Pro; aggregates
+  80+ tools live), **SysReptor** (OSS + low-cost Pro; beautiful HTML/CSS→PDF
+  reports — a strong low-cost benchmark for Siege Tower's documentation
+  module), and a wave of AI-first tools (**PentestPad, Pentest-Tools.com** at
+  $95–$190/user/mo bundling their own scanners + reporting — the exact
+  scanner-plus-reporting bundle Siege Tower + Bulwark is aiming at).
+
+### 1.2 Attack-planning / adversary-emulation / ATT&CK tooling
+
+Siege Tower's planning module competes here on playbook value while deliberately
+*not* executing.
+
+- **MITRE Caldera** — free/OSS automated adversary emulation (a real C2).
+  *Strengths:* deep ATT&CK grounding, plugins, auto attack-chaining.
+  *Weaknesses:* **it executes** (operationally heavy/risky), planners can
+  generate unrealistic chains, web UI not hardened, lab-only per MITRE.
+- **Atomic Red Team (Red Canary)** — free/OSS library of small ATT&CK-mapped
+  tests. *Strengths:* huge, well-maintained, ATT&CK-indexed — a great *content
+  source* for planning. *Weaknesses:* a test library, not a platform (no
+  engagement mgmt/reporting/planning UI).
+- **VECTR (Security Risk Advisors)** — purple-team planning + results tracking +
+  benchmarking. Community free; Enterprise quote-based. *Strengths:*
+  **conceptually closest to Siege Tower's philosophy** — plans and documents,
+  doesn't execute; ATT&CK-aligned, trend/benchmark reporting. *Weaknesses:*
+  oriented to internal purple teams/detection engineering, not consultant
+  pentest deliverables; opaque enterprise pricing.
+- **Prelude Operator** — free desktop adversary emulation. *Strengths:*
+  accessible, good ATT&CK TTP coverage. *Weaknesses:* **executes**; commercial
+  focus has shifted, raising continuity questions.
+- **SCYTHE** — commercial adversarial emulation / BAS. Custom-quoted.
+  *Strengths:* fast campaign building, realistic emulation, purple-team
+  workflows. *Weaknesses:* **executes**, enterprise price, overkill for solos.
+- **MITRE ATT&CK Navigator** — free/OSS matrix annotation/visualization.
+  *Strengths:* universal lingua franca for coverage, shareable JSON layers.
+  *Weaknesses:* just a visualizer — no engagement mgmt, execution, or
+  reporting. **Siege Tower should ingest/emit Navigator layers.**
+- **"Vaunt" — UNVERIFIED.** The research could not confirm a security/ATT&CK
+  product by this name; it resolves to an unrelated aviation app and a
+  developer-relations tool. Treat as not-a-known-competitor until the exact
+  product/URL is confirmed. Flagged rather than fabricated.
+
+### 1.3 Offensive orchestration / C2 (context only — Siege Tower does not compete)
+
+Execution engines buyers mentally place nearby; Siege Tower should *interoperate
+with and log alongside* them, not replace them.
+
+- **Metasploit** — Framework free/OSS; Pro commercial (quote-based, low five
+  figures/user/yr). Gold-standard exploit library; Pro reporting is generic.
+- **Cobalt Strike (Fortra)** — premium red-team C2, ~$3,500/user/yr, purchase
+  vetting. Gold-standard C2; execution-only; integrates with Ghostwriter for
+  logging.
+- **Sliver (Bishop Fox)** — free/OSS modern C2, the leading Cobalt Strike
+  alternative. Execution-only, CLI-centric, no reporting layer.
+
+### 1.4 How incumbents handle the cross-cutting capabilities
+
+| Capability | Who does it well | Gap Siege Tower can exploit |
+| --- | --- | --- |
+| Real-time collaboration | Cervantes, Faraday, SysReptor Pro, Hexway, Reconmap | Older tools bolt it on; concurrent editing is now table-stakes |
+| Client / multi-tenant separation | PlexTrac, AttackForge, Rootshell, Astra, Cobalt, Hexway portal | Most OSS tools assume single-org — weak client separation |
+| Findings / writeup library | PlexTrac (WriteupsDB), Ghostwriter, Dradis Pro, AttackForge | Biggest report time-saver; Siege Tower has none yet |
+| Retest / remediation tracking | PlexTrac, Rootshell, Cobalt, Astra, AttackForge, Sprocket | Auditor requirement; strongest in client-facing commercial tools |
+| Compliance mapping | Astra, Pentest-Tools.com, PlexTrac | Uneven in OSS; Bulwark already maps 4 frameworks — reuse it |
+| Evidence / screenshot capture | PlexTrac ("report as you test"), Hexway, Faraday | Capturing *during* testing is the recurring pain point |
+| ATT&CK planning ↔ reporting link | VECTR, Navigator, Caldera (planning only) | **Nobody links planning to the report — the core opening** |
+
+### 1.5 The gaps pentesters actually complain about
+
+1. **Reporting is the universally hated bottleneck** — teams spend 20–60% of
+   engagement time on reports (8–14 hours unaided, ~5–6 with a platform). Root
+   cause: documentation happens *after* the hacking, so context decays.
+2. **Repetitive rewriting** of the same findings across clients; CVSS scoring
+   alone can eat ~3 hours per report.
+3. **Ugly tool output** that doesn't paste cleanly into a report.
+4. **Price cliffs for small players** — a painful gap between free-but-clunky
+   OSS and expensive-but-polished enterprise SaaS.
+5. **Planning and reporting are disconnected** — plan in Navigator/VECTR/a
+   spreadsheet, execute in Metasploit/Burp/Sliver, report in PlexTrac/Dradis:
+   three disjoint worlds with manual re-entry. Nobody owns the full
+   plan → evidence → report thread for a manual pentester.
+6. **Execution tools scare buyers** — Caldera/Prelude/SCYTHE/Cobalt Strike/
+   Sliver all execute; many orgs and compliance regimes want the planning,
+   methodology, and documentation *without a live C2 in their environment*.
+7. **Confusing commercial models** — non-rolling credits and pervasive
+   quote-only pricing frustrate buyers who want predictable, self-serve plans.
+
+### 1.6 Pricing landscape
+
+- **Free / OSS (self-host effort):** Ghostwriter, Cervantes, Reconmap, PCF,
+  SysReptor CE, Faraday CE, Dradis CE, Caldera, Atomic Red Team, ATT&CK
+  Navigator, VECTR Community, Prelude Operator, Sliver, Metasploit Framework.
+- **Prosumer / small-team (~$30–$200/user/mo):** PenTest.WS, Hexway
+  (~$78), Dradis Pro ($100–$149), AttackForge (~$50 up to packaged
+  $150–$800/mo), Pentest-Tools.com ($95–$190), SysReptor Pro.
+- **Enterprise / quote-based (low-five to six figures/yr):** PlexTrac, Rootshell
+  Prism, SCYTHE, VECTR Enterprise, Metasploit Pro, Cobalt Strike (~$3,500/user).
+- **PtaaS / per-engagement:** Astra ($1,999–$5,999/yr/target, transparent),
+  Cobalt (~$8,500 start, $65k–$90k first-year), Sprocket (continuous). Broader
+  market: a web/API pentest runs $4,000–$50,000 per engagement.
+
+**Pricing takeaway:** there is a clear **"prosumer" white space** — a polished
+planning + documentation product in the **~$30–$99/user/month** band with a
+genuinely useful free tier, undercutting PlexTrac while out-polishing the free
+OSS pack, and bundling Bulwark the way Pentest-Tools.com and Astra bundle their
+scanners.
+
+*(A few exact figures above — PenTest.WS tiers, Metasploit Pro per-seat — are
+approximate because vendor pages were quote-walled or blocked during research;
+treat those as directional.)*
+
+### 1.7 Table stakes any serious entrant must have
+
+Reusable findings/writeup library with **CVSS 3.1 and 4.0** auto-scoring;
+document-as-you-test evidence capture (screenshots, request/response, command
+output); scanner import + de-dup + normalization (Burp, Nessus, Nmap, Nuclei,
+ZAP, OpenVAS, **and Bulwark**); one-click branded **DOCX/PDF** export;
+multi-project/client separation with RBAC + SSO/MFA; retest/remediation
+tracking; compliance mapping (SOC 2, ISO 27001, PCI DSS, HIPAA, NIST);
+real-time collaboration + an API; ATT&CK alignment with Navigator layer
+import/export; and, for the company segment, a client portal.
+
+### 1.8 Where Siege Tower differentiates
+
+1. **Own the full thread: Plan → Execute-assist → Evidence → Report, in one
+   product.** No incumbent unifies ATT&CK planning with consulting-grade
+   reporting. Pitch: *"the plan you build is the report you ship"* — planned
+   techniques become the reporting scaffold, and captured evidence attaches
+   back to the planned ATT&CK step.
+2. **"Execution assistant, not executor" — as a feature, not a limitation.**
+   No C2 in the client's environment means easier legal sign-off, no dual-use/
+   abuse risk, and it directly attacks the #1 pain (post-hoc reconstruction) by
+   capturing the exploitation chain *as the human does it*.
+3. **Deep Bulwark (DAST) pairing competitors can't match** — scan findings flow
+   straight into the plan and the report, auto-mapped to ATT&CK and the four
+   compliance frameworks Bulwark already supports. A tight scan → plan → report
+   loop with retest-driven rescans is a defensible story.
+4. **ATT&CK-native playbooks as reusable IP** — ship the technique library as
+   methodology + report structure; import/emit Navigator layers.
+5. **AI that removes drudgery, grounded in the planned technique and captured
+   evidence** (findings drafting, exec summaries, CVSS suggestions, output
+   cleanup) — higher fidelity than generic AI because it's context-anchored.
+6. **Predictable, transparent, self-serve pricing** with a real free tier — a
+   direct wedge against PlexTrac's price complaints and Cobalt's credit model.
+7. **Interoperate with the C2 world rather than compete** — log alongside and
+   ingest output from Cobalt Strike / Sliver / Metasploit (the Ghostwriter
+   model), so Siege Tower is the documentation/planning brain regardless of the
+   exploitation tools the tester uses.
+
+### 1.9 Positioning: independents vs. companies
+
+- **Independents / consultants (land here first):** lead with time-to-report
+  and price — "cut report time in half, polished output that out-classes free
+  OSS, at a fraction of PlexTrac." Solo workflow: plan in ATT&CK, capture
+  evidence live, one-click branded DOCX/PDF, reusable findings so client #2
+  reuses client #1's writeups. Bundle Bulwark. Ship a free/individual tier to
+  win mindshare against Ghostwriter/SysReptor/PenTest.WS.
+- **Companies (internal teams, MSSPs, consultancies — expand into):** lead with
+  multi-tenant client separation, SSO/MFA/RBAC, client portal, compliance
+  mapping, and retest tracking — enterprise table stakes without the enterprise
+  price pain. Emphasize standardized methodology + ATT&CK coverage reporting
+  (VECTR-style) to prove testing depth to clients/auditors, and the
+  "no C2 in the environment" safety story for regulated buyers. Offer
+  self-hosted deployment for data-ownership-conscious buyers. Frame vs.
+  PlexTrac: *"the planning + reporting depth of PlexTrac, with a built-in
+  scanner and ATT&CK planning, at a price that doesn't require a board
+  meeting."*
+
+---
+
 ## Part 2 — Product review: what Siege Tower is, and what to improve
 
 ### What it is today
