@@ -32,11 +32,32 @@ import dataclasses
 from siege_tower import (
     BoxType, EngagementInput, Objective, build_plans, suggest_followups,
 )
+from siege_tower.cvss import score_vector
 from siege_tower.playbook import DEFAULT_PLAYBOOK
 from siege_tower.render import plan_result_to_dict
 from siege_tower.schema import Platform, Restriction, Tactic
 
 _PLAYS_BY_ID = {p.technique_id: p for p in DEFAULT_PLAYBOOK}
+
+FINDING_SEVERITIES = {"informational", "low", "medium", "high", "critical"}
+FINDING_STATUSES = {"open", "in_remediation", "retest", "fixed",
+                    "risk_accepted", "false_positive"}
+
+
+def _finalize_finding(data: dict) -> dict:
+    """Auto-derive CVSS score/severity from a v3.x vector when present and not
+    explicitly overridden. Keeps scoring consistent and saves manual effort."""
+    vector = data.get("cvss_vector")
+    if vector:
+        scored = score_vector(vector)
+        if scored["score"] is not None:
+            if data.get("cvss_score") is None:
+                data["cvss_score"] = scored["score"]
+            if not data.get("severity"):
+                data["severity"] = scored["severity"]
+            if not data.get("cvss_version"):
+                data["cvss_version"] = scored["version"]
+    return data
 
 from . import auth, db
 from .bootstrap import build_bootstrap
@@ -191,6 +212,78 @@ class RoeIn(BaseModel):
     emulate_adversary: str | None = Field(default=None, max_length=64)
     objective_note: str | None = _LONG
     max_plans: int = Field(default=5, ge=1, le=10)
+
+
+class FindingIn(BaseModel):
+    model_config = {"extra": "ignore"}
+    title: str = Field(min_length=1, max_length=300)
+    engagement_id: str | None = Field(default=None, max_length=64)
+    severity: str | None = Field(default=None, max_length=20)
+    cvss_vector: str | None = Field(default=None, max_length=120)
+    cvss_score: float | None = Field(default=None, ge=0, le=10)
+    status: str = Field(default="open", max_length=20)
+    affected_assets: list[str] = Field(default_factory=list, max_length=1000)
+    description: str | None = _LONG
+    impact: str | None = _LONG
+    reproduction: str | None = _LONG
+    remediation: str | None = _LONG
+    references: list[str] = Field(default_factory=list, max_length=200)
+    technique_ids: list[str] = Field(default_factory=list, max_length=200)
+    cwe: str | None = Field(default=None, max_length=32)
+    tags: list[str] = Field(default_factory=list, max_length=100)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=500)
+    library_id: str | None = Field(default=None, max_length=64)
+
+
+class FindingUpdateIn(BaseModel):
+    model_config = {"extra": "ignore"}
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    engagement_id: str | None = Field(default=None, max_length=64)
+    severity: str | None = Field(default=None, max_length=20)
+    cvss_vector: str | None = Field(default=None, max_length=120)
+    cvss_score: float | None = Field(default=None, ge=0, le=10)
+    status: str | None = Field(default=None, max_length=20)
+    affected_assets: list[str] | None = Field(default=None, max_length=1000)
+    description: str | None = _LONG
+    impact: str | None = _LONG
+    reproduction: str | None = _LONG
+    remediation: str | None = _LONG
+    references: list[str] | None = Field(default=None, max_length=200)
+    technique_ids: list[str] | None = Field(default=None, max_length=200)
+    cwe: str | None = Field(default=None, max_length=32)
+    tags: list[str] | None = Field(default=None, max_length=100)
+    evidence_ids: list[str] | None = Field(default=None, max_length=500)
+
+
+class LibraryItemIn(BaseModel):
+    """A reusable finding template — no engagement/asset/evidence specifics."""
+    model_config = {"extra": "ignore"}
+    title: str = Field(min_length=1, max_length=300)
+    severity: str | None = Field(default=None, max_length=20)
+    cvss_vector: str | None = Field(default=None, max_length=120)
+    cvss_score: float | None = Field(default=None, ge=0, le=10)
+    description: str | None = _LONG
+    impact: str | None = _LONG
+    remediation: str | None = _LONG
+    references: list[str] = Field(default_factory=list, max_length=200)
+    technique_ids: list[str] = Field(default_factory=list, max_length=200)
+    cwe: str | None = Field(default=None, max_length=32)
+    tags: list[str] = Field(default_factory=list, max_length=100)
+
+
+class LibraryItemUpdateIn(BaseModel):
+    model_config = {"extra": "ignore"}
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    severity: str | None = Field(default=None, max_length=20)
+    cvss_vector: str | None = Field(default=None, max_length=120)
+    cvss_score: float | None = Field(default=None, ge=0, le=10)
+    description: str | None = _LONG
+    impact: str | None = _LONG
+    remediation: str | None = _LONG
+    references: list[str] | None = Field(default=None, max_length=200)
+    technique_ids: list[str] | None = Field(default=None, max_length=200)
+    cwe: str | None = Field(default=None, max_length=32)
+    tags: list[str] | None = Field(default=None, max_length=100)
 
 
 class FollowupIn(BaseModel):
@@ -501,6 +594,164 @@ def engagement_report(eid: str, format: str = "json",
     if format == "markdown":
         return Response(content=render_markdown(rep), media_type="text/markdown")
     return rep
+
+
+# ── CVSS helper ──────────────────────────────────────────────────
+
+@app.get("/api/cvss")
+def cvss(vector: str, user: dict = Depends(auth.current_user)):
+    """Score a CVSS vector (v3.x computed; v4.0 recognized, score manual)."""
+    return score_vector(vector)
+
+
+# ── Findings (auth + tenancy + roles) ────────────────────────────
+
+def _validate_finding_enums(severity: str | None, status: str | None) -> None:
+    if severity and severity not in FINDING_SEVERITIES:
+        raise HTTPException(status_code=400, detail=f"Invalid severity: {severity}")
+    if status and status not in FINDING_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+
+@app.get("/api/findings")
+def list_findings(engagement_id: str | None = None,
+                  user: dict = Depends(auth.current_user)):
+    return {"findings": db.list_findings(user["org_id"], engagement_id)}
+
+
+@app.post("/api/findings", status_code=201)
+def create_finding(body: FindingIn, request: Request,
+                   user: dict = Depends(auth.require_role("operator"))):
+    _validate_finding_enums(body.severity, body.status)
+    data = _finalize_finding(body.model_dump())
+    eid = data.pop("engagement_id", None)
+    if eid and not db.get_engagement(eid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    f = db.create_finding(user["org_id"], user["id"], eid, data)
+    db.audit("finding_create", actor_id=user["id"], org_id=user["org_id"],
+             target_id=f["id"], ip=getattr(request.state, "client_ip", None))
+    return f
+
+
+@app.get("/api/findings/{fid}")
+def get_finding(fid: str, user: dict = Depends(auth.current_user)):
+    f = db.get_finding(fid, user["org_id"])
+    if not f:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return f
+
+
+@app.put("/api/findings/{fid}")
+def update_finding(fid: str, body: FindingUpdateIn, request: Request,
+                   user: dict = Depends(auth.require_role("operator"))):
+    _validate_finding_enums(body.severity, body.status)
+    data = _finalize_finding(body.model_dump(exclude_unset=True))
+    if "engagement_id" in data and data["engagement_id"] \
+            and not db.get_engagement(data["engagement_id"], user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    f = db.update_finding(fid, user["org_id"], data)
+    if not f:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    db.audit("finding_update", actor_id=user["id"], org_id=user["org_id"],
+             target_id=fid, ip=getattr(request.state, "client_ip", None))
+    return f
+
+
+@app.delete("/api/findings/{fid}", status_code=204)
+def delete_finding(fid: str, request: Request,
+                   user: dict = Depends(auth.require_role("operator"))):
+    if not db.delete_finding(fid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Finding not found")
+    db.audit("finding_delete", actor_id=user["id"], org_id=user["org_id"],
+             target_id=fid, ip=getattr(request.state, "client_ip", None))
+    return Response(status_code=204)
+
+
+_LIBRARY_FIELDS = ("title", "severity", "cvss_vector", "cvss_score", "description",
+                   "impact", "remediation", "references", "technique_ids", "cwe", "tags")
+
+
+@app.post("/api/findings/{fid}/save-to-library", status_code=201)
+def save_finding_to_library(fid: str, request: Request,
+                            user: dict = Depends(auth.require_role("operator"))):
+    """Create a reusable library template from an existing finding."""
+    f = db.get_finding(fid, user["org_id"])
+    if not f:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    tmpl = {k: f.get(k) for k in _LIBRARY_FIELDS if f.get(k) is not None}
+    item = db.create_library_item(user["org_id"], user["id"], tmpl)
+    db.audit("library_create_from_finding", actor_id=user["id"], org_id=user["org_id"],
+             target_id=item["id"], ip=getattr(request.state, "client_ip", None))
+    return item
+
+
+# ── Findings library ─────────────────────────────────────────────
+
+@app.get("/api/library")
+def list_library(user: dict = Depends(auth.current_user)):
+    return {"library": db.list_library(user["org_id"])}
+
+
+@app.post("/api/library", status_code=201)
+def create_library_item(body: LibraryItemIn, request: Request,
+                        user: dict = Depends(auth.require_role("operator"))):
+    _validate_finding_enums(body.severity, None)
+    item = db.create_library_item(user["org_id"], user["id"],
+                                  _finalize_finding(body.model_dump()))
+    db.audit("library_create", actor_id=user["id"], org_id=user["org_id"],
+             target_id=item["id"], ip=getattr(request.state, "client_ip", None))
+    return item
+
+
+@app.get("/api/library/{lid}")
+def get_library_item(lid: str, user: dict = Depends(auth.current_user)):
+    item = db.get_library_item(lid, user["org_id"])
+    if not item:
+        raise HTTPException(status_code=404, detail="Library item not found")
+    return item
+
+
+@app.put("/api/library/{lid}")
+def update_library_item(lid: str, body: LibraryItemUpdateIn, request: Request,
+                        user: dict = Depends(auth.require_role("operator"))):
+    _validate_finding_enums(body.severity, None)
+    item = db.update_library_item(lid, user["org_id"],
+                                  _finalize_finding(body.model_dump(exclude_unset=True)))
+    if not item:
+        raise HTTPException(status_code=404, detail="Library item not found")
+    db.audit("library_update", actor_id=user["id"], org_id=user["org_id"],
+             target_id=lid, ip=getattr(request.state, "client_ip", None))
+    return item
+
+
+@app.delete("/api/library/{lid}", status_code=204)
+def delete_library_item(lid: str, request: Request,
+                        user: dict = Depends(auth.require_role("operator"))):
+    if not db.delete_library_item(lid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Library item not found")
+    db.audit("library_delete", actor_id=user["id"], org_id=user["org_id"],
+             target_id=lid, ip=getattr(request.state, "client_ip", None))
+    return Response(status_code=204)
+
+
+@app.post("/api/library/{lid}/instantiate", status_code=201)
+def instantiate_from_library(lid: str, request: Request,
+                             engagement_id: str | None = None,
+                             user: dict = Depends(auth.require_role("operator"))):
+    """Create a finding by copying a library template (optionally into an
+    engagement). This is the 'write once, reuse across reports' path."""
+    item = db.get_library_item(lid, user["org_id"])
+    if not item:
+        raise HTTPException(status_code=404, detail="Library item not found")
+    if engagement_id and not db.get_engagement(engagement_id, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    data = {k: item.get(k) for k in _LIBRARY_FIELDS if item.get(k) is not None}
+    data["library_id"] = lid
+    data.setdefault("status", "open")
+    f = db.create_finding(user["org_id"], user["id"], engagement_id, data)
+    db.audit("finding_from_library", actor_id=user["id"], org_id=user["org_id"],
+             target_id=f["id"], ip=getattr(request.state, "client_ip", None))
+    return f
 
 
 # Serve the web UI last, so it never shadows the /api routes above.

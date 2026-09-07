@@ -18,6 +18,7 @@ Typical use:
         print(option.title, option.fit_score)
 """
 from .capabilities import CAPABILITY_LABELS, GOAL_CAPABILITY
+from .cvss import base_score, score_vector, severity_band
 from .engine import build_plans, filter_playbook, start_capabilities
 from .followups import FollowupSuggestion, suggest_followups
 from .playbook import DEFAULT_PLAYBOOK, playbook_by_id
@@ -39,6 +40,8 @@ __all__ = [
     "build_plans", "filter_playbook", "start_capabilities",
     "suggest_followups", "FollowupSuggestion",
     "GOAL_CAPABILITY", "CAPABILITY_LABELS",
+    # cvss
+    "score_vector", "base_score", "severity_band",
     # outputs
     "PlanResult", "PlanOption", "PlanStepView",
     # rendering
