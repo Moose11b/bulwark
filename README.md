@@ -99,7 +99,10 @@ All endpoints are planning/documentation only — none execute anything or conta
 | `GET`  | `/api/engagements` | list saved engagements (with progress) |
 | `POST` | `/api/engagements` | save a new engagement |
 | `GET/PUT/DELETE` | `/api/engagements/{id}` | read / update / remove one |
-| `GET`  | `/api/engagements/{id}/report?format=json\|markdown` | compile the report |
+| `GET`  | `/api/engagements/{id}/report?format=json\|markdown\|docx\|pdf` | compile the report (branded DOCX/PDF include findings) |
+| `GET/POST/PUT/DELETE` | `/api/findings`, `/api/library` | findings & reusable findings library |
+| `POST/GET` | `/api/evidence` (+`/{id}/download`) | upload / fetch evidence (hashed, encrypted) |
+| `GET`  | `/api/cvss?vector=...` | CVSS v3.1 score + severity |
 
 ## Keeping the playbook current
 
