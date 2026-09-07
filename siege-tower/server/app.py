@@ -408,7 +408,10 @@ def change_password(body: ChangePasswordIn, request: Request,
 
 def _public_user(u: dict) -> dict:
     return {"id": u["id"], "username": u["username"], "email": u.get("email"),
-            "role": u["role"], "org_id": u["org_id"]}
+            "role": u["role"], "org_id": u["org_id"],
+            "is_active": u.get("is_active", True),
+            "last_login_at": u.get("last_login_at"),
+            "must_change": u.get("must_change_password", False)}
 
 
 # ── User management (admin) ──────────────────────────────────────
@@ -427,12 +430,25 @@ def create_user(body: UserCreateIn, request: Request,
         raise HTTPException(status_code=409, detail="Username already exists")
     try:
         created = db.create_user(user["org_id"], body.username, body.password,
-                                 role=body.role, email=body.email)
+                                 role=body.role, email=body.email, must_change=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.audit("user_create", actor_id=user["id"], org_id=user["org_id"],
              target_id=created["id"], ip=getattr(request.state, "client_ip", None))
     return _public_user(created)
+
+
+@app.post("/api/users/{uid}/reset-password")
+def reset_user_password(uid: str, request: Request,
+                        user: dict = Depends(auth.require_role("admin"))):
+    """Reset a user's password to a one-time temp (forces a change on next
+    login). The temp is returned once for the admin to hand over."""
+    temp = db.admin_reset_password(uid, user["org_id"])
+    if temp is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.audit("password_reset", actor_id=user["id"], org_id=user["org_id"],
+             target_id=uid, ip=getattr(request.state, "client_ip", None))
+    return {"temp_password": temp, "must_change": True}
 
 
 @app.patch("/api/users/{uid}")
