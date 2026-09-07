@@ -540,8 +540,11 @@ button{font-family:inherit}
 .modal-wide{max-width:1080px;width:96vw}
 .find-layout{display:grid;grid-template-columns:260px 1fr;gap:0;min-height:60vh;max-height:74vh}
 .find-side{border-right:1px solid var(--rule,#D9C4A0);display:flex;flex-direction:column;overflow:hidden}
-.find-side-actions{display:flex;gap:8px;padding:12px}
+.find-side-actions{display:flex;gap:8px;padding:12px 12px 4px}
 .find-side-actions .btn{flex:1;padding:8px;font-size:13px}
+.find-side-import{padding:0 12px 10px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.find-side-import .btn{width:100%;padding:7px;font-size:12.5px}
+.find-side-import .fe-note{display:block;margin-top:5px;font-size:11.5px}
 .find-items{overflow-y:auto;padding:0 8px 12px}
 .find-item{padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent}
 .find-item:hover{background:var(--surface-2)}.find-item.sel{background:var(--surface-2);border-color:var(--line-strong)}
@@ -980,6 +983,11 @@ button{font-family:inherit}
         <div class="find-side-actions">
           <button type="button" class="btn btn-primary" id="findNew">+ New</button>
           <button type="button" class="btn btn-ghost" id="findFromLib">From library</button>
+        </div>
+        <div class="find-side-import">
+          <input type="file" id="findImportFile" accept=".json,.sarif,application/json" hidden>
+          <button type="button" class="btn btn-ghost" id="findImportBtn" title="Import a Bulwark scan result or a SARIF file">⭳ Import scan</button>
+          <span class="fe-note" id="findImportNote"></span>
         </div>
         <div class="find-items" id="findItems"></div>
       </aside>

@@ -873,8 +873,26 @@ async function findingsFromLibrary(){
   });
 }
 
+async function importScan(fileInput){
+  const note=$('#findImportNote');
+  if(!fileInput.files||!fileInput.files[0]) return;
+  if(!state.engagementId){ if(note) note.textContent='Save the engagement first.'; return; }
+  const fd=new FormData(); fd.append('file',fileInput.files[0]); fd.append('engagement_id',state.engagementId);
+  if(note) note.textContent='Importing…';
+  try{
+    const r=await api('/api/imports',{method:'POST',body:fd});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ if(note) note.textContent=(d.detail||'Import failed.'); return; }
+    if(note) note.textContent=`Imported ${d.imported} finding(s) from ${d.source}.`;
+    await loadFindingsList();
+  }catch(e){ if(note) note.textContent='Import failed.'; }
+  finally{ fileInput.value=''; }
+}
+
 $('#findingsBtn').onclick=openFindings;
 $('#findClose').onclick=closeFindings;
+$('#findImportBtn').onclick=()=>$('#findImportFile').click();
+$('#findImportFile').onchange=e=>importScan(e.target);
 $('#findNew').onclick=()=>{ findState.selected=null; renderFindingsList(); renderFindingEditor(null); };
 $('#findFromLib').onclick=findingsFromLibrary;
 $('#findScrim').onclick=e=>{ if(e.target===$('#findScrim')) closeFindings(); };
