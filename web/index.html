@@ -633,6 +633,13 @@ button{font-family:inherit}
 .login-btn{width:100%;margin-top:16px;padding:12px;border:none;border-radius:8px;background:var(--accent);color:#F6EFE6;
   font-size:15px;font-weight:600;font-family:Fraunces,Georgia,serif;cursor:pointer}
 .login-btn:hover{background:var(--accent-deep)}.login-btn:disabled{opacity:.6;cursor:default}
+.login-alt{text-align:center;margin-top:14px;font-size:13px}
+.login-alt a{color:var(--accent-deep);text-decoration:none;font-weight:600}
+.login-alt a:hover{text-decoration:underline}
+.login-or{display:flex;align-items:center;gap:10px;color:var(--ink-faint);font-size:12px;margin:16px 0 12px}
+.login-or::before,.login-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.login-sso-btn{display:block;text-align:center;text-decoration:none;background:var(--surface-2);color:var(--accent-deep);border:1px solid var(--line-strong)}
+.login-sso-btn:hover{background:var(--surface)}
 .user-chip{display:flex;align-items:center;gap:10px;margin-left:auto;align-self:flex-start}
 .user-name{font-size:12.5px;color:var(--ink-soft);font-family:IBM Plex Mono,monospace}
 .logout-btn{padding:6px 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--accent-deep);
@@ -766,13 +773,26 @@ table.team select{padding:5px 7px;border:1px solid var(--line-strong);border-rad
         </svg>
         <h1>Siege Tower</h1>
       </div>
-      <p class="login-sub">Sign in to plan and document authorized engagements.</p>
+      <p class="login-sub" id="loginSub">Sign in to plan and document authorized engagements.</p>
+      <div id="signupOrgField" hidden>
+        <label for="signupOrg">Organization name</label>
+        <input id="signupOrg" type="text" autocomplete="organization" autocapitalize="words">
+      </div>
       <label for="loginUser">Username</label>
       <input id="loginUser" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
       <label for="loginPass">Password</label>
       <input id="loginPass" name="password" type="password" autocomplete="current-password" required>
+      <div id="signupEmailField" hidden>
+        <label for="signupEmail">Email (optional)</label>
+        <input id="signupEmail" type="email" autocomplete="email" autocapitalize="none" spellcheck="false">
+      </div>
       <div class="login-error" id="loginError" role="alert"></div>
       <button type="submit" id="loginBtn" class="login-btn">Sign in</button>
+      <div class="login-alt"><a href="#" id="signupToggle" hidden>Create an account</a></div>
+      <div class="login-sso" id="ssoBlock" hidden>
+        <div class="login-or"><span>or</span></div>
+        <a class="login-btn login-sso-btn" id="ssoBtn" href="/api/auth/sso/login">Single sign-on</a>
+      </div>
     </form>
   </div>
 

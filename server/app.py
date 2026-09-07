@@ -361,6 +361,45 @@ def health():
     return {"status": "ok", "service": "siege-tower"}
 
 
+_ALLOW_SIGNUP = os.environ.get("SIEGE_ALLOW_SIGNUP") == "1"
+
+
+class SignupIn(BaseModel):
+    org_name: str = Field(min_length=1, max_length=200)
+    username: str = Field(min_length=1, max_length=150)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=1024)
+    email: str | None = Field(default=None, max_length=320)
+
+
+@app.get("/api/auth/config")
+def auth_config():
+    """Public: tells the login screen which sign-in options are enabled."""
+    from . import sso
+    return {"signup_enabled": _ALLOW_SIGNUP,
+            "sso_enabled": sso.enabled(), "sso_label": sso.LABEL}
+
+
+@app.post("/api/auth/signup", status_code=201)
+def signup(body: SignupIn, request: Request):
+    if not _ALLOW_SIGNUP:
+        raise HTTPException(status_code=403, detail="Self-service signup is disabled")
+    ip = request.client.host if request.client else "unknown"
+    if not _login_limiter.check(f"signup:{ip}"):
+        raise HTTPException(status_code=429, detail="Too many attempts; try again later")
+    if db.get_user_by_username(body.username):
+        raise HTTPException(status_code=409, detail="Username already exists")
+    org = db.create_org(body.org_name)
+    try:
+        user = db.create_user(org["id"], body.username, body.password,
+                              role="admin", email=body.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    token = db.create_session(user["id"])
+    db.mark_login(user["id"])
+    db.audit("signup", actor_id=user["id"], org_id=org["id"], ip=ip)
+    return {"token": token, "user": _public_user(user)}
+
+
 @app.post("/api/auth/login")
 def login(body: LoginIn, request: Request):
     ip = request.client.host if request.client else "unknown"
@@ -404,6 +443,55 @@ def change_password(body: ChangePasswordIn, request: Request,
     db.audit("password_change", actor_id=user["id"], org_id=user["org_id"],
              ip=getattr(request.state, "client_ip", None))
     return {"status": "ok"}
+
+
+@app.get("/api/auth/sso/login")
+def sso_login():
+    from fastapi.responses import RedirectResponse
+    from . import sso
+    if not sso.enabled():
+        raise HTTPException(status_code=404, detail="SSO is not configured")
+    state, nonce = sso.new_state()
+    return RedirectResponse(sso.authorize_url(state, nonce), status_code=302)
+
+
+@app.get("/api/auth/sso/callback")
+def sso_callback(request: Request, code: str | None = None, state: str | None = None,
+                 error: str | None = None):
+    from fastapi.responses import RedirectResponse
+    from . import sso
+    if not sso.enabled():
+        raise HTTPException(status_code=404, detail="SSO is not configured")
+    if error or not code or not state:
+        return RedirectResponse("/#sso_error=1", status_code=302)
+    nonce = sso.pop_state(state)
+    if nonce is None:
+        return RedirectResponse("/#sso_error=1", status_code=302)
+    try:
+        tokens = sso.exchange_code(code)
+        claims = sso.verify_id_token(tokens.get("id_token", ""), nonce)
+    except Exception:
+        log.exception("SSO verification failed")
+        return RedirectResponse("/#sso_error=1", status_code=302)
+
+    ident = sso.claims_identity(claims)
+    user = db.get_user_by_username(ident["username"]) if ident.get("username") else None
+    if not user:
+        if not sso.AUTO_PROVISION:
+            return RedirectResponse("/#sso_error=noaccount", status_code=302)
+        org = db.first_org()
+        if not org:
+            return RedirectResponse("/#sso_error=1", status_code=302)
+        import secrets as _secrets
+        user = db.create_user(org["id"], ident["username"], _secrets.token_urlsafe(24),
+                              role=sso.DEFAULT_ROLE, email=ident.get("email"))
+    if not user["is_active"]:
+        return RedirectResponse("/#sso_error=disabled", status_code=302)
+    token = db.create_session(user["id"])
+    db.mark_login(user["id"])
+    db.audit("sso_login", actor_id=user["id"], org_id=user["org_id"],
+             ip=request.client.host if request.client else None)
+    return RedirectResponse(f"/#sso={token}", status_code=302)
 
 
 def _public_user(u: dict) -> dict:

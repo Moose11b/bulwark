@@ -1160,6 +1160,44 @@ function showLogin(msg){
 }
 function hideLogin(){ const ov=$('#loginOverlay'); if(ov) ov.hidden=true; }
 
+let LOGIN_MODE='login';
+async function loadAuthConfig(){
+  try{
+    const c=await (await fetch('/api/auth/config')).json();
+    if(c.signup_enabled){ const t=$('#signupToggle'); if(t) t.hidden=false; }
+    if(c.sso_enabled){ const s=$('#ssoBlock'); if(s) s.hidden=false;
+      const btn=$('#ssoBtn'); if(btn && c.sso_label) btn.textContent=c.sso_label; }
+  }catch(e){}
+}
+function setLoginMode(m){
+  LOGIN_MODE=m; const signup=(m==='signup');
+  const of=$('#signupOrgField'), ef=$('#signupEmailField');
+  if(of) of.hidden=!signup; if(ef) ef.hidden=!signup;
+  $('#loginBtn').textContent=signup?'Create account':'Sign in';
+  const sub=$('#loginSub'); if(sub) sub.textContent=signup
+    ? 'Create your organization and admin account.'
+    : 'Sign in to plan and document authorized engagements.';
+  const t=$('#signupToggle'); if(t) t.textContent=signup?'Have an account? Sign in':'Create an account';
+  $('#loginPass').setAttribute('autocomplete', signup?'new-password':'current-password');
+  const e=$('#loginError'); if(e) e.textContent='';
+}
+
+async function doSignup(){
+  const org=$('#signupOrg').value.trim(), username=$('#loginUser').value.trim(),
+        password=$('#loginPass').value, email=$('#signupEmail').value.trim()||null;
+  if(!org||!username||!password){ $('#loginError').textContent='Organization, username, and password are required.'; return; }
+  if(password.length<12){ $('#loginError').textContent='Password must be at least 12 characters.'; return; }
+  const btn=$('#loginBtn'); if(btn) btn.disabled=true;
+  try{
+    const res=await fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({org_name:org,username,password,email})});
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok){ $('#loginError').textContent=(d.detail||'Could not create the account.'); return; }
+    setToken(d.token); CURRENT_USER=d.user; $('#loginPass').value=''; await startApp();
+  }catch(e){ $('#loginError').textContent='Could not reach the server.'; }
+  finally{ if(btn) btn.disabled=false; }
+}
+
 async function doLogin(){
   const username=$('#loginUser').value.trim(), password=$('#loginPass').value;
   if(!username||!password){ $('#loginError').textContent='Enter a username and password.'; return; }
@@ -1279,10 +1317,28 @@ async function startApp(){
 
 async function boot(){
   const loginForm=$('#loginForm');
-  if(loginForm) loginForm.addEventListener('submit', e=>{ e.preventDefault(); doLogin(); });
+  if(loginForm) loginForm.addEventListener('submit', e=>{ e.preventDefault(); (LOGIN_MODE==='signup'?doSignup():doLogin()); });
+  const st=$('#signupToggle'); if(st) st.onclick=e=>{ e.preventDefault(); setLoginMode(LOGIN_MODE==='signup'?'login':'signup'); };
   const lo=$('#logoutBtn'); if(lo) lo.onclick=logout;
   const tt=$('#themeToggle'); if(tt) tt.onclick=toggleTheme;
   applyTheme(currentTheme());
+  loadAuthConfig();
+  // Single sign-on redirect lands with the token (or an error) in the fragment.
+  const h=location.hash||'';
+  if(h.indexOf('sso=')>=0){
+    const tok=h.split('sso=')[1].split('&')[0];
+    history.replaceState(null,'',location.pathname);
+    if(tok){ setToken(tok);
+      try{ const r=await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+tok}});
+        if(r.ok){ CURRENT_USER=await r.json(); await startApp(); return; } }catch(e){}
+      setToken(null);
+    }
+  } else if(h.indexOf('sso_error')>=0){
+    history.replaceState(null,'',location.pathname);
+    const kind=h.indexOf('noaccount')>=0?'No account is provisioned for that identity — ask an admin.'
+      : h.indexOf('disabled')>=0?'That account is deactivated.' : 'Single sign-on failed. Please try again.';
+    showLogin(kind); return;
+  }
   if(AUTH_TOKEN){
     try{
       const r=await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+AUTH_TOKEN}});

@@ -49,6 +49,9 @@ app is usable but never open:
 | `SIEGE_BEHIND_TLS` | Set to `1` when TLS is terminated upstream (enables HSTS). | *(unset)* |
 | `SIEGE_ALLOW_INSECURE` | Set to `1` to allow a non-loopback bind without TLS (trusted networks only). | *(unset)* |
 | `SIEGE_TRUST_PROXY` | Set to `1` to trust `X-Forwarded-For` for client IP (only behind a known proxy). | *(unset)* |
+| `SIEGE_ALLOW_SIGNUP` | Set to `1` to enable public self-service signup (each signup creates a new org + admin). | *(off)* |
+| `SIEGE_OIDC_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | Enable OIDC single sign-on (all four required). | *(off)* |
+| `SIEGE_OIDC_LABEL` / `_AUTO_PROVISION` / `_DEFAULT_ROLE` | SSO button label; `1` to create a local user on first valid login; role for provisioned users. | `Single sign-on` / off / `operator` |
 | `SIEGE_DB` | SQLite path. | `siege.db` next to the app |
 | `SIEGE_EVIDENCE_DIR` | Directory for uploaded evidence files (encrypted at rest, 0600). | `evidence_store/` next to the app |
 | `SIEGE_MAX_EVIDENCE_BYTES` | Max size of a single evidence upload. | `26214400` (25 MiB) |
