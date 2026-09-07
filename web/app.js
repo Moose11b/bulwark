@@ -139,6 +139,10 @@ function buildIntake(){
     rc.appendChild(c);
   });
   $('#railTech').textContent=SIEGE.playbook_stats.total; $('#heroTech').textContent=SIEGE.playbook_stats.total;
+  const pm=SIEGE.playbook_meta;
+  if(pm){ const a=$('#heroAttack'), l=$('#heroPlaybook');
+    if(a) a.textContent='v'+esc(pm.attack_version);
+    if(l) l.textContent='ATT&CK · playbook v'+esc(pm.playbook_version); }
 }
 function syncChips(){
   $('#tbTitle').textContent=$('#fName').value||'New engagement';

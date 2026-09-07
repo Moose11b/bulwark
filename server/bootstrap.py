@@ -19,6 +19,7 @@ from siege_tower.capabilities import CAPABILITY_LABELS
 from siege_tower.playbook import DEFAULT_PLAYBOOK
 from siege_tower.schema import Platform, Restriction, Tactic
 from siege_tower.tools import tools_for
+from siege_tower.version import playbook_meta
 
 _TACTIC_ORDER = [
     "reconnaissance", "resource-development", "initial-access", "execution",
@@ -81,5 +82,6 @@ def build_bootstrap() -> dict:
             "total": len(DEFAULT_PLAYBOOK),
             "by_tactic": dict(Counter(p.tactic.value for p in DEFAULT_PLAYBOOK)),
         },
+        "playbook_meta": playbook_meta(),
         "results": results,
     }

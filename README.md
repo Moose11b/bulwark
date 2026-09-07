@@ -115,6 +115,18 @@ not hardcoded UI. Add or edit `Play` entries and the API, the drag-and-drop
 palette, and the recommended plans all pick them up — so the tool keeps pace as
 tradecraft advances. Bring your own `Play` list to replace it entirely.
 
+The playbook is **versioned** (`siege_tower/version.py`) and validated against
+MITRE ATT&CK. Check for drift (revoked / deprecated / renumbered techniques)
+with the built-in currency tool:
+
+```bash
+python -m siege_tower.attack_sync --fetch        # against the latest ATT&CK
+```
+
+A weekly GitHub Action runs this automatically. The app shows the ATT&CK and
+playbook versions on the launch screen. See [docs/PLAYBOOK.md](docs/PLAYBOOK.md)
+for the update policy and cadence.
+
 ## Integrating with a larger platform
 
 A host app can import the engine directly instead of running this server — see
