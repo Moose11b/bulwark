@@ -371,6 +371,32 @@ claim holds. The problems are all in the standalone web/server tier and the
 data it stores (client names, in-scope target IPs, authorization references,
 operator names, engagement notes — all sensitive).
 
+### Resolution status (standalone app)
+
+All standalone findings below were closed in this branch. Summary:
+
+| ID | Finding | Status |
+| --- | --- | --- |
+| C1 | No authentication | **Fixed** — bearer-token auth on every `/api` route except health/login (`server/auth.py`, `server/security.py`) |
+| C2 | No tenant/client separation | **Fixed** — org model; all engagement queries scoped by `org_id` in `server/db.py` |
+| C3 | Stored XSS in UI | **Fixed** — quote-safe `esc()` applied to the history list and all user fields (`web/app.js`) |
+| H1 | Plaintext HTTP | **Fixed** — TLS config + non-loopback bind guard + HSTS (`server/__main__.py`, headers middleware) |
+| H2 | No encryption at rest | **Fixed** — Fernet encryption of the engagement blob, key via `SIEGE_ENCRYPTION_KEY` |
+| H3 | Unvalidated bodies / mass assignment | **Fixed** — typed, length-bounded Pydantic models; 1 MiB body cap |
+| H4 | Unauth network exposure via `SIEGE_HOST` | **Fixed** — refuses non-loopback bind without TLS unless opted in |
+| H5 | Missing CSP / security headers | **Fixed** — strict CSP (external JS) + hardening headers middleware |
+| M1 | No audit log | **Fixed** — append-only `audit_log`, admin-readable at `/api/audit` |
+| M2 | CSRF once cookies added | **Avoided** — header-based bearer tokens, no cookie/CSRF surface |
+| M3 | No rate limiting | **Fixed** — per-IP API limit + strict login limit |
+| M4 | Hard delete / UI-only retention | **Fixed** — soft delete + admin-only audited purge |
+| M5 | Error text leakage | **Fixed** — generic 500s; detail logged server-side |
+| L1 | `datetime.utcnow()` deprecation | **Fixed** in the standalone server (timezone-aware) |
+| L2 | No authorization-reference gate | Deferred — product guardrail, tracked for phase 2 |
+| L3 | CORS lockdown if a split frontend is added | Documented in `SECURITY.md` |
+
+The details below are retained as the original review. See `SECURITY.md` for the
+implemented model and `tests/test_security.py` for the executable guarantees.
+
 ### Required changes, by severity
 
 Severity reflects a networked/product deployment. For a purely local
