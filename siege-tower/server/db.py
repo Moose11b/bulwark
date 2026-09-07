@@ -215,6 +215,12 @@ def set_branding(org_id: str, data: dict) -> dict:
     return merged
 
 
+def first_org() -> dict | None:
+    with _conn() as c:
+        row = c.execute("SELECT * FROM orgs ORDER BY created_at LIMIT 1").fetchone()
+    return {"id": row["id"], "name": row["name"], "created_at": row["created_at"]} if row else None
+
+
 def count_users() -> int:
     with _conn() as c:
         return c.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
