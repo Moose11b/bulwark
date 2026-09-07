@@ -28,6 +28,190 @@ _SEVERITY_COLOR = {
 _SEV_LABEL = {"critical": "Critical", "high": "High", "medium": "Medium",
               "low": "Low", "informational": "Informational"}
 
+# ATT&CK tactic colours — mirror the app UI.
+_TACTIC_COLOR = {
+    "reconnaissance": "6B7F8C", "resource-development": "6B5B41",
+    "initial-access": "9C3B2E", "execution": "A9822C", "persistence": "7A6A9C",
+    "privilege-escalation": "B06A2E", "defense-evasion": "7C6A55",
+    "credential-access": "4E7C6B", "discovery": "3C5A6B",
+    "lateral-movement": "8A6D3B", "collection": "5E6B2C",
+    "command-and-control": "6B5B41", "exfiltration": "97362A", "impact": "5A3A3A",
+}
+_WORKED = {"succeeded", "fell_back"}
+_FAILED = {"failed", "blocked"}
+
+
+def _roadmap_drawing(ctx: dict, avail_width: float):
+    """A vector attack-path roadmap (nodes + arrows) for the PDF, or None."""
+    from reportlab.graphics.shapes import Circle, Drawing, Group, Line, Polygon, String
+    from reportlab.lib import colors
+
+    steps = ctx.get("steps", [])
+    if not steps:
+        return None
+
+    r = 13.0
+    gap = 86.0
+    row_h = 58.0
+    mx = 6.0
+    per_row = max(1, int((avail_width - 2 * mx) // gap))
+    rows = (len(steps) + per_row - 1) // per_row
+    top_y = rows * row_h - 18
+    height = rows * row_h + 6
+    d = Drawing(avail_width, height)
+    accent = colors.HexColor("#B0472C")
+    crit = colors.HexColor("#9C2B1B")
+    faint = colors.HexColor("#828A7B")
+    line_c = colors.HexColor("#B4A788")
+
+    def node_xy(i):
+        row, col = divmod(i, per_row)
+        return mx + r + col * gap, top_y - row * row_h
+
+    def arrow(x1, y1, x2, y2, worked):
+        col = accent if worked else faint
+        ln = Line(x1, y1, x2, y2, strokeColor=col, strokeWidth=2 if worked else 1.2)
+        if not worked:
+            ln.strokeDashArray = [3, 4]
+        d.add(ln)
+        # arrowhead
+        import math
+        ang = math.atan2(y2 - y1, x2 - x1)
+        ah = 5.0
+        p = Polygon(points=[
+            x2, y2,
+            x2 - ah * math.cos(ang - 0.5), y2 - ah * math.sin(ang - 0.5),
+            x2 - ah * math.cos(ang + 0.5), y2 - ah * math.sin(ang + 0.5),
+        ], fillColor=col, strokeColor=col)
+        d.add(p)
+
+    for i, s in enumerate(steps):
+        cx, cy = node_xy(i)
+        oc = s.get("outcome") or "not_started"
+        tcol = colors.HexColor("#" + _TACTIC_COLOR.get(s.get("tactic"), "8A6D3B"))
+        worked = oc in _WORKED
+        if i < len(steps) - 1:
+            nx, ny = node_xy(i + 1)
+            if (i % per_row) != per_row - 1:  # same row → straight
+                arrow(cx + r, cy, nx - r - 4, ny, worked)
+            else:  # row wrap → drop then across
+                arrow(cx, cy - r, nx, ny + r + 4, worked)
+        # node
+        if worked:
+            fill, txt = tcol, colors.HexColor("#F6EFE6")
+            stroke = tcol
+        elif oc in _FAILED:
+            fill, txt, stroke = colors.white, crit, crit
+        else:
+            fill, txt, stroke = colors.white, colors.HexColor("#20261E"), line_c
+        circ = Circle(cx, cy, r, fillColor=fill, strokeColor=stroke, strokeWidth=2)
+        if oc in ("skipped", "not_started"):
+            circ.strokeDashArray = [3, 3]
+        d.add(circ)
+        d.add(String(cx, cy - 4, str(i + 1), fontName="Helvetica-Bold",
+                     fontSize=10, fillColor=txt, textAnchor="middle"))
+        d.add(String(cx, cy - r - 11, s.get("technique_id") or "",
+                     fontName="Courier", fontSize=7, fillColor=faint, textAnchor="middle"))
+    return d
+
+
+def _hex(h):
+    h = h.lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+
+def _roadmap_png(ctx: dict):
+    """Render the roadmap to PNG bytes (Pillow) for DOCX embedding; None if
+    Pillow or a usable font isn't available."""
+    steps = ctx.get("steps", [])
+    if not steps:
+        return None
+    try:
+        import io as _io
+        import math
+        from PIL import Image, ImageDraw, ImageFont
+
+        def _font(bold, size):
+            for name in (("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"),
+                         "DejaVuSansMono.ttf"):
+                try:
+                    return ImageFont.truetype(name, size)
+                except Exception:
+                    continue
+            return ImageFont.load_default()
+
+        ss = 2  # supersample for anti-aliasing
+        r, gap, row_h, mx = 15 * ss, 96 * ss, 62 * ss, 12 * ss
+        avail = 980 * ss
+        per_row = max(1, int((avail - 2 * mx) // gap))
+        rows = (len(steps) + per_row - 1) // per_row
+        cols = min(len(steps), per_row)
+        W = int(mx * 2 + (cols - 1) * gap + r * 2 + 8 * ss)
+        H = int(rows * row_h + 10 * ss)
+        img = Image.new("RGB", (W, H), (255, 255, 255))
+        dr = ImageDraw.Draw(img)
+        f_num, f_tid = _font(True, 15 * ss), _font(False, 9 * ss)
+        accent, crit, faint, line_c, ink = (
+            _hex("#B0472C"), _hex("#9C2B1B"), _hex("#828A7B"),
+            _hex("#B4A788"), _hex("#20261E"))
+
+        def xy(i):
+            row, col = divmod(i, per_row)
+            return mx + r + col * gap, int(row * row_h + r + 6 * ss)
+
+        def arrow(x1, y1, x2, y2, worked):
+            col = accent if worked else faint
+            w = 3 if worked else 2
+            if worked:
+                dr.line([(x1, y1), (x2, y2)], fill=col, width=w)
+            else:
+                # dashed
+                n = max(1, int(math.hypot(x2 - x1, y2 - y1) // (7 * ss)))
+                for k in range(n):
+                    if k % 2:
+                        continue
+                    a, b = k / n, min(1, (k + 1) / n)
+                    dr.line([(x1 + (x2 - x1) * a, y1 + (y2 - y1) * a),
+                             (x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)], fill=col, width=w)
+            ang = math.atan2(y2 - y1, x2 - x1)
+            ah = 7 * ss
+            dr.polygon([(x2, y2),
+                        (x2 - ah * math.cos(ang - 0.5), y2 - ah * math.sin(ang - 0.5)),
+                        (x2 - ah * math.cos(ang + 0.5), y2 - ah * math.sin(ang + 0.5))],
+                       fill=col)
+
+        def ctext(x, y, s, font, fill):
+            bb = dr.textbbox((0, 0), s, font=font)
+            dr.text((x - (bb[2] - bb[0]) / 2, y - (bb[3] - bb[1]) / 2), s, font=font, fill=fill)
+
+        for i, s in enumerate(steps):
+            cx, cy = xy(i)
+            oc = s.get("outcome") or "not_started"
+            tcol = _hex("#" + _TACTIC_COLOR.get(s.get("tactic"), "8A6D3B"))
+            worked = oc in _WORKED
+            if i < len(steps) - 1:
+                nx, ny = xy(i + 1)
+                if (i % per_row) != per_row - 1:
+                    arrow(cx + r, cy, nx - r - 4 * ss, ny, worked)
+                else:
+                    arrow(cx, cy + r, nx, ny - r - 4 * ss, worked)
+            if worked:
+                fill, txt, stroke = tcol, (246, 239, 230), tcol
+            elif oc in _FAILED:
+                fill, txt, stroke = (255, 255, 255), crit, crit
+            else:
+                fill, txt, stroke = (255, 255, 255), ink, line_c
+            dr.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fill, outline=stroke, width=2 * ss)
+            ctext(cx, cy, str(i + 1), f_num, txt)
+            ctext(cx, cy + r + 9 * ss, s.get("technique_id") or "", f_tid, faint)
+
+        img = img.resize((W // ss, H // ss), Image.LANCZOS)
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:
+        return None
+
 
 def _sorted_findings(findings: list[dict]) -> list[dict]:
     return sorted(findings, key=lambda f: (_SEVERITY_ORDER.get(f.get("severity"), 5),
@@ -133,6 +317,18 @@ def to_docx(ctx: dict) -> bytes:
         run.font.color.rgb = RGBColor.from_string(_SEVERITY_COLOR[sev])
         run.bold = True
         row[1].paragraphs[0].add_run(str(counts[sev]))
+
+    # Attack-path roadmap (rendered image, if the vector renderer is available).
+    png = _roadmap_png(ctx)
+    if png:
+        from docx.shared import Inches
+        _h1("Attack path")
+        cap = doc.add_paragraph(
+            "Nodes are plan steps (filled = worked, hollow/red = failed, dashed = "
+            "skipped); the solid line is the path to the objective.")
+        cap.runs[0].italic = True
+        cap.runs[0].font.size = Pt(9)
+        doc.add_picture(io.BytesIO(png), width=Inches(6.5))
 
     # Findings detail.
     _h1("Findings")
@@ -265,6 +461,16 @@ def to_pdf(ctx: dict) -> bytes:
     tbl.setStyle(TableStyle(tstyle))
     story.append(Spacer(1, 6))
     story.append(tbl)
+
+    # Attack-path roadmap.
+    rm = _roadmap_drawing(ctx, 6.6 * inch)
+    if rm is not None:
+        story.append(Paragraph("Attack path", h1))
+        story.append(Paragraph(
+            "Nodes are plan steps (filled = worked, hollow/red = failed, dashed = "
+            "skipped); the solid terracotta line is the path to the objective.", body))
+        story.append(Spacer(1, 4))
+        story.append(rm)
 
     story.append(Paragraph("Findings", h1))
     if not findings:
