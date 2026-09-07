@@ -19,6 +19,7 @@ Typical use:
 """
 from .capabilities import CAPABILITY_LABELS, GOAL_CAPABILITY
 from .cvss import base_score, score_vector, severity_band
+from .version import ATTACK_VERSION, PLAYBOOK_UPDATED, PLAYBOOK_VERSION, playbook_meta
 from .engine import build_plans, filter_playbook, start_capabilities
 from .followups import FollowupSuggestion, suggest_followups
 from .playbook import DEFAULT_PLAYBOOK, playbook_by_id
@@ -42,6 +43,8 @@ __all__ = [
     "GOAL_CAPABILITY", "CAPABILITY_LABELS",
     # cvss
     "score_vector", "base_score", "severity_band",
+    # playbook currency
+    "playbook_meta", "PLAYBOOK_VERSION", "ATTACK_VERSION", "PLAYBOOK_UPDATED",
     # outputs
     "PlanResult", "PlanOption", "PlanStepView",
     # rendering
