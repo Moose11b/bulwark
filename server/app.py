@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -261,6 +262,11 @@ class FindingUpdateIn(BaseModel):
     cwe: str | None = Field(default=None, max_length=32)
     tags: list[str] | None = Field(default=None, max_length=100)
     evidence_ids: list[str] | None = Field(default=None, max_length=500)
+
+
+class RetestIn(BaseModel):
+    status: str = Field(max_length=20)
+    note: str | None = _LONG
 
 
 class LibraryItemIn(BaseModel):
@@ -639,6 +645,45 @@ def engagement_report(eid: str, format: str = "json",
     return rep
 
 
+_OPEN_STATUSES = {"open", "in_remediation", "retest"}
+_RESOLVED_STATUSES = {"fixed", "risk_accepted", "false_positive"}
+
+
+@app.get("/api/engagements/{eid}/remediation")
+def remediation_summary(eid: str, user: dict = Depends(auth.current_user)):
+    """Remediation/retest posture for an engagement: counts by status and
+    severity, and the findings still needing a retest."""
+    if not db.get_engagement(eid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    findings = db.list_findings(user["org_id"], engagement_id=eid)
+    by_status: dict[str, int] = {}
+    open_by_severity: dict[str, int] = {}
+    needing_retest = []
+    for f in findings:
+        st = f.get("status") or "open"
+        by_status[st] = by_status.get(st, 0) + 1
+        if st in _OPEN_STATUSES:
+            sev = f.get("severity") or "informational"
+            open_by_severity[sev] = open_by_severity.get(sev, 0) + 1
+            needing_retest.append({
+                "id": f.get("id"), "title": f.get("title"),
+                "severity": f.get("severity"), "status": st,
+                "cvss_score": f.get("cvss_score"),
+            })
+    total = len(findings)
+    resolved = sum(v for k, v in by_status.items() if k in _RESOLVED_STATUSES)
+    return {
+        "engagement_id": eid,
+        "total_findings": total,
+        "resolved": resolved,
+        "open": total - resolved,
+        "remediation_pct": round(100.0 * resolved / total, 1) if total else 0.0,
+        "by_status": by_status,
+        "open_by_severity": open_by_severity,
+        "needing_retest": needing_retest,
+    }
+
+
 # ── CVSS helper ──────────────────────────────────────────────────
 
 @app.get("/api/cvss")
@@ -684,20 +729,58 @@ def get_finding(fid: str, user: dict = Depends(auth.current_user)):
     return f
 
 
+def _history_entry(status: str, user: dict, note: str | None) -> dict:
+    return {"status": status, "at": datetime.now(timezone.utc).isoformat(),
+            "by": user.get("username"), "note": note}
+
+
 @app.put("/api/findings/{fid}")
 def update_finding(fid: str, body: FindingUpdateIn, request: Request,
                    user: dict = Depends(auth.require_role("operator"))):
     _validate_finding_enums(body.severity, body.status)
+    existing = db.get_finding(fid, user["org_id"])
+    if not existing:
+        raise HTTPException(status_code=404, detail="Finding not found")
     data = _finalize_finding(body.model_dump(exclude_unset=True))
     if "engagement_id" in data and data["engagement_id"] \
             and not db.get_engagement(data["engagement_id"], user["org_id"]):
         raise HTTPException(status_code=404, detail="Engagement not found")
+    # Record a status transition in the finding's history (remediation trail).
+    if "status" in data and data["status"] != existing.get("status"):
+        history = list(existing.get("status_history") or [])
+        history.append(_history_entry(data["status"], user, None))
+        data["status_history"] = history
     f = db.update_finding(fid, user["org_id"], data)
-    if not f:
-        raise HTTPException(status_code=404, detail="Finding not found")
     db.audit("finding_update", actor_id=user["id"], org_id=user["org_id"],
              target_id=fid, ip=getattr(request.state, "client_ip", None))
     return f
+
+
+@app.post("/api/findings/{fid}/retest")
+def retest_finding(fid: str, body: RetestIn, request: Request,
+                   user: dict = Depends(auth.require_role("operator"))):
+    """Record a retest outcome: set the finding's status and append a dated,
+    attributed entry (with an optional note) to its remediation history."""
+    _validate_finding_enums(None, body.status)
+    existing = db.get_finding(fid, user["org_id"])
+    if not existing:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    history = list(existing.get("status_history") or [])
+    history.append(_history_entry(body.status, user, body.note))
+    f = db.update_finding(fid, user["org_id"],
+                          {"status": body.status, "status_history": history})
+    db.audit("finding_retest", actor_id=user["id"], org_id=user["org_id"],
+             target_id=fid, ip=getattr(request.state, "client_ip", None),
+             detail=body.status)
+    return f
+
+
+@app.get("/api/findings/{fid}/history")
+def finding_history(fid: str, user: dict = Depends(auth.current_user)):
+    f = db.get_finding(fid, user["org_id"])
+    if not f:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return {"status": f.get("status"), "history": f.get("status_history") or []}
 
 
 @app.delete("/api/findings/{fid}", status_code=204)
