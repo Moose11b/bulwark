@@ -29,9 +29,19 @@ cd SiegeTower
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[server]"
 
-# Run the app, then open http://127.0.0.1:8000
+# Generate an at-rest encryption key and choose an admin password.
+export SIEGE_ENCRYPTION_KEY="$(python -m server.security keygen)"
+export SIEGE_ADMIN_PASSWORD="choose-a-strong-password"
+
+# Run the app, then open http://127.0.0.1:8000 and sign in as `admin`.
 python -m server        # or: siege-tower-server   (SIEGE_RELOAD=1 for autoreload)
 ```
+
+The app requires authentication. On first run it creates one organization and
+an `admin` user (password from `SIEGE_ADMIN_PASSWORD`, or generated and printed
+once to the log). Engagements are isolated per organization, and the stored data
+is encrypted at rest when `SIEGE_ENCRYPTION_KEY` is set. See
+[SECURITY.md](SECURITY.md) for the full security model and configuration.
 
 Prefer the terminal? The engine ships a CLI with no dependencies at all:
 
