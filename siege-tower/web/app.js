@@ -600,6 +600,7 @@ function openReport(){
   if(dlNote) dlNote.textContent = state.engagementId
     ? 'Downloads reflect the last saved version.'
     : 'Save the engagement to enable downloads.';
+  const sp=$('#sharePanel'); if(sp) sp.hidden=true;
   $('#scrim').classList.add('open');
 }
 
@@ -653,7 +654,63 @@ $('#histToggle').onclick=()=>{ state.authorized=!state.authorized; renderHistory
 $('#reportBtn').onclick=openReport;
 $('#saveBtn').onclick=saveEngagement;
 $('#repClose').onclick=()=>$('#scrim').classList.remove('open');
-document.querySelectorAll('#repDownloads .dl-btn').forEach(b=>b.onclick=()=>downloadReport(b.dataset.fmt));
+document.querySelectorAll('#repDownloads .dl-btn[data-fmt]').forEach(b=>b.onclick=()=>downloadReport(b.dataset.fmt));
+
+/* ── Shareable client links ───────────────────────────────────── */
+const $share=()=>document.querySelector('#sharePanel');
+$('#shareBtn').onclick=()=>{ const p=$share(); if(!p) return; if(p.hidden){ p.hidden=false; renderSharePanel(); } else p.hidden=true; };
+
+async function renderSharePanel(){
+  const p=$share();
+  if(!state.engagementId){ p.innerHTML='<h4>Share with client</h4><div class="rep-dl-note">Save the engagement first to create a share link.</div>'; return; }
+  p.innerHTML='<h4>Share with client</h4><div class="rep-dl-note">Loading…</div>';
+  let shares=[];
+  try{ shares=((await (await api('/api/engagements/'+state.engagementId+'/shares')).json()).shares)||[]; }catch(e){}
+  const origin=location.origin;
+  const rows=shares.map(s=>{
+    const exp=(s.expires_at||'').slice(0,10);
+    const status=s.revoked?'revoked':(s.active?('expires '+exp):('expired '+exp));
+    return `<div class="share-row ${s.revoked||!s.active?'revoked':''}">
+      <input readonly value="${esc(origin)}/share.html#…" title="Token shown once at creation; copy it then">
+      <span class="exp">${esc(status)}</span>
+      ${(!s.revoked&&s.active)?`<button class="share-mini" data-revoke="${esc(s.id)}">Revoke</button>`:''}
+    </div>`;
+  }).join('');
+  p.innerHTML=`<h4>Share with client</h4>
+    <div class="rep-dl-note" style="margin-bottom:8px">Creates a read-only link to this report (findings, roadmap, coverage) — no account needed. The full link is shown once, at creation.</div>
+    <div class="share-create">
+      <label class="rep-dl-lbl">Expires in</label>
+      <select id="shareTtl"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="30">30 days</option><option value="90">90 days</option></select>
+      <button class="share-mini" id="shareCreate">Create link</button>
+      <span class="rep-dl-note" id="shareNote"></span>
+    </div>
+    ${rows||'<div class="rep-dl-note">No active links.</div>'}`;
+  $('#shareCreate').onclick=createShareLink;
+  p.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=()=>revokeShare(b.dataset.revoke));
+}
+
+async function createShareLink(){
+  const note=$('#shareNote'); const ttl=parseInt($('#shareTtl').value,10)||14;
+  if(note) note.textContent='Creating…';
+  try{
+    const r=await api('/api/engagements/'+state.engagementId+'/shares',{method:'POST',body:JSON.stringify({ttl_days:ttl})});
+    if(!r.ok){ if(note) note.textContent='Failed.'; return; }
+    const d=await r.json();
+    const full=location.origin+d.url;
+    // Show the full link once, in a copyable field prepended to the panel.
+    const box=document.createElement('div'); box.className='share-row';
+    box.innerHTML=`<input readonly id="newShareUrl" value="${esc(full)}"><button class="share-mini" id="copyShare">Copy</button><span class="exp">new · copy now</span>`;
+    const create=$('#sharePanel .share-create'); create.insertAdjacentElement('afterend',box);
+    const inp=document.querySelector('#newShareUrl'); inp.focus(); inp.select();
+    document.querySelector('#copyShare').onclick=()=>{ inp.select(); try{ navigator.clipboard.writeText(full); }catch(e){ document.execCommand&&document.execCommand('copy'); } document.querySelector('#copyShare').textContent='Copied'; };
+    if(note) note.textContent='Link created — copy it now (shown once).';
+  }catch(e){ if(note) note.textContent='Failed.'; }
+}
+
+async function revokeShare(id){
+  try{ await api('/api/shares/'+id,{method:'DELETE'}); }catch(e){}
+  renderSharePanel();
+}
 
 // Download the server-compiled report (includes findings + evidence) for the
 // saved engagement. Uses the auth wrapper, so the bearer token is sent.

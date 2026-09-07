@@ -21,6 +21,7 @@ references, operator names, notes, evidence references).
 | **Rate limiting** | Login is limited per IP+username (10 / 5 min); the API per IP (600 / min). In-process — front hosted/multi-worker deployments with a shared limiter. |
 | **Transport** | The server refuses to bind a non-loopback interface over plaintext HTTP unless TLS is configured (or `SIEGE_ALLOW_INSECURE=1` for a trusted private network). Serve TLS directly or behind an HTTPS proxy (`SIEGE_BEHIND_TLS=1` enables HSTS). |
 | **Security headers** | Strict CSP (`script-src 'self'` — the UI ships external JS, no inline script), plus `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, COOP/CORP, and `Cache-Control: no-store` on API responses. |
+| **Shareable links** | Read-only client report links are random tokens stored only as a hash, with a required expiry (1–365 days) and one-click revocation. The public `/api/share/{token}` endpoint exposes only that one engagement's report — no auth, no other data, no writes. |
 | **Audit log** | Append-only record of logins (success and failure), logout, password changes, user management, and engagement create/update/delete/purge — with actor, org, target, IP, and timestamp. Admins read it at `GET /api/audit`. |
 | **Retention** | Deletes are soft (the row is retained with a `deleted_at` stamp). Hard erasure is an admin-only, audited `DELETE /api/engagements/{id}/purge`. |
 | **Error handling** | Unhandled errors return a generic 500; details are logged server-side only. |

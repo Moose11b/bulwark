@@ -269,6 +269,11 @@ class RetestIn(BaseModel):
     note: str | None = _LONG
 
 
+class ShareCreateIn(BaseModel):
+    ttl_days: int = Field(default=14, ge=1, le=365)
+    label: str | None = Field(default=None, max_length=120)
+
+
 class LibraryItemIn(BaseModel):
     """A reusable finding template — no engagement/asset/evidence specifics."""
     model_config = {"extra": "ignore"}
@@ -661,6 +666,70 @@ def navigator_layer(eid: str, user: dict = Depends(auth.current_user)):
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{name}.navigator.json"'},
     )
+
+
+# ── Shareable report links (client portal) ───────────────────────
+
+@app.post("/api/engagements/{eid}/shares", status_code=201)
+def create_share(eid: str, body: ShareCreateIn, request: Request,
+                 user: dict = Depends(auth.require_role("operator"))):
+    if not db.get_engagement(eid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    token, share = db.create_share(user["org_id"], eid, user["id"],
+                                   body.ttl_days, body.label)
+    db.audit("share_create", actor_id=user["id"], org_id=user["org_id"],
+             target_id=eid, ip=getattr(request.state, "client_ip", None))
+    return {"token": token, "url": f"/share.html#{token}", **share}
+
+
+@app.get("/api/engagements/{eid}/shares")
+def list_shares(eid: str, user: dict = Depends(auth.current_user)):
+    if not db.get_engagement(eid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return {"shares": db.list_shares(eid, user["org_id"])}
+
+
+@app.delete("/api/shares/{sid}", status_code=204)
+def revoke_share(sid: str, request: Request,
+                 user: dict = Depends(auth.require_role("operator"))):
+    if not db.revoke_share(sid, user["org_id"]):
+        raise HTTPException(status_code=404, detail="Share not found")
+    db.audit("share_revoke", actor_id=user["id"], org_id=user["org_id"],
+             target_id=sid, ip=getattr(request.state, "client_ip", None))
+    return Response(status_code=204)
+
+
+# Public, unauthenticated — a client opens the shared read-only report.
+@app.get("/api/share/{token}")
+def public_share(token: str):
+    s = db.resolve_share(token)
+    if not s:
+        raise HTTPException(status_code=404, detail="This link is invalid or has expired")
+    rep = _assemble_report(s["engagement_id"], s["org_id"])
+    rep["shared"] = True
+    return rep
+
+
+@app.get("/api/share/{token}/download")
+def public_share_download(token: str, format: str = "pdf"):
+    s = db.resolve_share(token)
+    if not s:
+        raise HTTPException(status_code=404, detail="This link is invalid or has expired")
+    rep = _assemble_report(s["engagement_id"], s["org_id"])
+    name = (rep["engagement"].get("name") or "engagement").replace('"', "").replace("\n", "")
+    if format == "markdown":
+        return Response(content=render_markdown(rep), media_type="text/markdown")
+    if format == "docx":
+        from . import report_export
+        return Response(
+            content=report_export.to_docx(rep),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{name}.docx"'})
+    if format == "pdf":
+        from . import report_export
+        return Response(content=report_export.to_pdf(rep), media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+    raise HTTPException(status_code=400, detail="Unsupported format")
 
 
 _OPEN_STATUSES = {"open", "in_remediation", "retest"}
