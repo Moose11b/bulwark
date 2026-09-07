@@ -17,9 +17,13 @@ from datetime import datetime, timezone
 
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3,
                    "informational": 4, None: 5}
+# Cartographic palette — matches the app UI (survey terracotta / teal, map ink).
+_ACCENT = "B0472C"     # survey terracotta
+_TEAL = "3E6B72"       # survey teal
+_INK = "20261E"        # topographic ink
 _SEVERITY_COLOR = {
-    "critical": "9C1F17", "high": "C0392B", "medium": "B9770E",
-    "low": "1E7A46", "informational": "3C5A6B",
+    "critical": "9C2B1B", "high": "C0562E", "medium": "B08814",
+    "low": "3E7A5A", "informational": "3E6B72",
 }
 _SEV_LABEL = {"critical": "Critical", "high": "High", "medium": "Medium",
               "low": "Low", "informational": "Informational"}
@@ -63,12 +67,19 @@ def to_docx(ctx: dict) -> bytes:
 
     doc = Document()
 
+    def _h1(text: str):
+        h = doc.add_heading(level=1)
+        r = h.add_run(text)
+        r.font.color.rgb = RGBColor.from_string(_ACCENT)
+        return h
+
     # Cover.
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = title.add_run(eng.get("name") or "Engagement Report")
     run.bold = True
     run.font.size = Pt(26)
+    run.font.color.rgb = RGBColor.from_string(_ACCENT)
     sub = doc.add_paragraph()
     sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
     sub.add_run("Penetration Test Report").font.size = Pt(14)
@@ -86,7 +97,7 @@ def to_docx(ctx: dict) -> bytes:
     doc.add_page_break()
 
     # Overview.
-    doc.add_heading("Overview", level=1)
+    _h1("Overview")
     for k, v in (("Client", eng.get("client")), ("Authorization", eng.get("authorization_ref")),
                  ("Objective", _lbl(eng.get("objective"))), ("Box type", _lbl(eng.get("box_type"))),
                  ("Status", _lbl(eng.get("status")))):
@@ -95,7 +106,7 @@ def to_docx(ctx: dict) -> bytes:
         p.add_run(str(v) if v else "—")
 
     # Rules of engagement.
-    doc.add_heading("Rules of engagement", level=1)
+    _h1("Rules of engagement")
     for k, v in (("In-scope platforms", roe.get("scope_platforms")),
                  ("In-scope targets", roe.get("in_scope_targets")),
                  ("Restrictions", roe.get("restrictions")),
@@ -105,7 +116,7 @@ def to_docx(ctx: dict) -> bytes:
         p.add_run(", ".join(map(str, v)) if isinstance(v, list) else (str(v) if v else "—"))
 
     # Executive summary.
-    doc.add_heading("Executive summary", level=1)
+    _h1("Executive summary")
     doc.add_paragraph(
         f"Execution coverage: {cov.get('coverage_pct', 0)}% "
         f"({cov.get('steps_worked', 0)} of {cov.get('total_steps', 0)} planned steps worked). "
@@ -124,7 +135,7 @@ def to_docx(ctx: dict) -> bytes:
         row[1].paragraphs[0].add_run(str(counts[sev]))
 
     # Findings detail.
-    doc.add_heading("Findings", level=1)
+    _h1("Findings")
     if not findings:
         doc.add_paragraph("No findings recorded.")
     for i, f in enumerate(findings, 1):
@@ -157,7 +168,7 @@ def to_docx(ctx: dict) -> bytes:
                 f"{e.get('filename','?')} (sha256 {str(e.get('sha256',''))[:12]}…)" for e in ev))
 
     # Execution log.
-    doc.add_heading("Execution log", level=1)
+    _h1("Execution log")
     steps = ctx.get("steps", [])
     if not steps:
         doc.add_paragraph("No steps documented.")
@@ -199,7 +210,9 @@ def to_pdf(ctx: dict) -> bytes:
     styles = getSampleStyleSheet()
     h1, h2, body = styles["Heading1"], styles["Heading2"], styles["BodyText"]
     center = ParagraphStyle("center", parent=body, alignment=TA_CENTER)
-    cover_title = ParagraphStyle("cover", parent=styles["Title"], fontSize=26, spaceAfter=12)
+    cover_title = ParagraphStyle("cover", parent=styles["Title"], fontSize=26, spaceAfter=12,
+                                textColor=colors.HexColor("#"+_ACCENT))
+    h1.textColor = colors.HexColor("#"+_ACCENT)
 
     def esc(v) -> str:
         return escape(str(v)) if v is not None else "—"
@@ -242,7 +255,7 @@ def to_pdf(ctx: dict) -> bytes:
         ("critical", "high", "medium", "low", "informational")]
     tbl = Table(data, colWidths=[2.5 * inch, 1.0 * inch])
     tstyle = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3C5A6B")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#"+_TEAL)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
