@@ -91,6 +91,21 @@ async function api(path, opts){
   return res;
 }
 
+/* ── Theme (light / dark) ─────────────────────────────────────── */
+function currentTheme(){ try { return localStorage.getItem('siege_theme') || 'light'; } catch(e){ return 'light'; } }
+function applyTheme(t){
+  if (t === 'dark') document.documentElement.setAttribute('data-theme','dark');
+  else document.documentElement.removeAttribute('data-theme');
+  const btn = document.querySelector('#themeToggle');
+  if (btn) btn.textContent = (t === 'dark') ? '☀' : '☾';
+}
+function toggleTheme(){
+  const t = (currentTheme() === 'dark') ? 'light' : 'dark';
+  try { localStorage.setItem('siege_theme', t); } catch(e){}
+  applyTheme(t);
+}
+applyTheme(currentTheme());  // apply immediately, including on the login screen
+
 /* ── Intake ───────────────────────────────────────────────────── */
 function buildIntake(){
   const ot=$('#objTiles'); ot.innerHTML='';
@@ -870,6 +885,8 @@ async function boot(){
   const loginForm=$('#loginForm');
   if(loginForm) loginForm.addEventListener('submit', e=>{ e.preventDefault(); doLogin(); });
   const lo=$('#logoutBtn'); if(lo) lo.onclick=logout;
+  const tt=$('#themeToggle'); if(tt) tt.onclick=toggleTheme;
+  applyTheme(currentTheme());
   if(AUTH_TOKEN){
     try{
       const r=await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+AUTH_TOKEN}});

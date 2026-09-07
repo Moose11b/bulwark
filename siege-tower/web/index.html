@@ -35,6 +35,7 @@
   --contour:rgba(62,107,114,.11);   /* topographic contour tint */
   --grid-minor:rgba(36,42,34,.07);  /* fine coordinate grid */
   --grid-major:rgba(62,107,114,.20);/* survey grid — every 5th line */
+  --field:#FBF7EF;        /* input fields */
   --shadow: 0 1px 2px rgba(36,42,34,.11), 0 12px 26px -14px rgba(36,42,34,.34);
   --shadow-lift: 0 3px 7px rgba(36,42,34,.14), 0 24px 48px -20px rgba(36,42,34,.40);
   --radius:10px; --radius-sm:7px;
@@ -543,84 +544,121 @@ button{font-family:inherit}
 .find-side-actions .btn{flex:1;padding:8px;font-size:13px}
 .find-items{overflow-y:auto;padding:0 8px 12px}
 .find-item{padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent}
-.find-item:hover{background:#ECE7DA}.find-item.sel{background:#E7E0D0;border-color:#BEB299}
-.find-item h4{margin:0 0 3px;font-family:Fraunces,Georgia,serif;font-size:13.5px;color:#242A22}
+.find-item:hover{background:var(--surface-2)}.find-item.sel{background:var(--surface-2);border-color:var(--line-strong)}
+.find-item h4{margin:0 0 3px;font-family:Fraunces,Georgia,serif;font-size:13.5px;color:var(--ink)}
 .find-item .fi-meta{display:flex;gap:6px;align-items:center}
 .sev-chip{font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;color:#fff}
 .sev-critical{background:#9C1F17}.sev-high{background:#C0392B}.sev-medium{background:#B9770E}
 .sev-low{background:#1E7A46}.sev-informational{background:#3E6B72}.sev-none{background:#7C6A55}
-.st-chip{font-size:10.5px;color:#4C5348}
+.st-chip{font-size:10.5px;color:var(--ink-soft)}
 .find-editor{overflow-y:auto;padding:16px 20px}
 .find-editor .fe-empty{color:var(--ink-faint);font-size:14px;padding:30px 6px}
 .fe-row{display:flex;gap:12px;flex-wrap:wrap}
 .fe-field{margin:0 0 12px;flex:1;min-width:180px}
-.fe-field label{display:block;font-size:12px;font-weight:600;color:#4C5348;margin-bottom:4px}
+.fe-field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px}
 .fe-field input,.fe-field select,.fe-field textarea{width:100%;box-sizing:border-box;padding:8px 10px;
-  border:1px solid #BEB299;border-radius:7px;background:#FBF7EF;font-family:inherit;font-size:13.5px;color:#242A22}
+  border:1px solid var(--line-strong);border-radius:7px;background:var(--field);font-family:inherit;font-size:13.5px;color:var(--ink)}
 .fe-field textarea{resize:vertical;min-height:54px}
 .fe-cvss-out{font-size:12.5px;font-weight:600;margin-top:4px}
 .fe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;padding-top:12px;border-top:1px solid #DDD2BC}
 .fe-actions .btn{font-size:13px;padding:8px 12px}
 .fe-note{font-size:12px;color:var(--ink-faint);align-self:center}
 .ev-list{display:flex;flex-direction:column;gap:5px;margin:6px 0}
-.ev-row{display:flex;align-items:center;gap:8px;font-size:12.5px;background:#ECE7DA;border-radius:6px;padding:5px 9px}
+.ev-row{display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--surface-2);border-radius:6px;padding:5px 9px}
 .ev-row .ev-name{flex:1;font-family:IBM Plex Mono,monospace;font-size:12px}
-.ev-row button{border:none;background:none;color:#8C3620;cursor:pointer;font-size:12px;font-weight:600}
+.ev-row button{border:none;background:none;color:var(--accent-deep);cursor:pointer;font-size:12px;font-weight:600}
 
 /* ── Report download buttons ─────────────────────────────────── */
 .rep-dl{display:flex;align-items:center;gap:7px;margin-left:auto;margin-right:10px;flex-wrap:wrap}
 .rep-dl-lbl{font-size:12px;color:var(--ink-faint);font-family:IBM Plex Mono,monospace}
-.dl-btn{padding:5px 11px;border:1px solid #BEB299;border-radius:7px;background:#F5F1E8;color:#8C3620;
+.dl-btn{padding:5px 11px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--accent-deep);
   font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-.dl-btn:hover{background:#ECE7DA}.dl-btn:disabled{opacity:.5;cursor:default}
+.dl-btn:hover{background:var(--surface-2)}.dl-btn:disabled{opacity:.5;cursor:default}
 .rep-dl-note{font-size:11.5px;color:var(--ink-faint)}
 
 /* ── Follow-ups on a failed step ─────────────────────────────── */
-.followups{margin-top:16px;padding:16px;border:1px solid #C9A99A;border-radius:12px;
-  background:linear-gradient(180deg,#FBEDE8,#F7E7E0)}
-.fu-head{font-family:Fraunces,Georgia,serif;font-size:15px;font-weight:600;color:#8C3620;margin-bottom:4px}
-.fu-sub{font-family:Spectral,Georgia,serif;font-size:12.5px;font-weight:400;color:#8A5A4A}
-.fu-note{font-size:13px;color:#8A5A4A;padding:4px 0}
+.followups{margin-top:16px;padding:16px;border:1px solid var(--line-strong);border-radius:12px;
+  background:var(--accent-weak)}
+.fu-head{font-family:Fraunces,Georgia,serif;font-size:15px;font-weight:600;color:var(--accent-deep);margin-bottom:4px}
+.fu-sub{font-family:Spectral,Georgia,serif;font-size:12.5px;font-weight:400;color:var(--ink-soft)}
+.fu-note{font-size:13px;color:var(--ink-soft);padding:4px 0}
 .fu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:10px}
-.fu-card{background:#FBF7EF;border:1px solid #D9C4A0;border-radius:9px;padding:11px 12px}
+.fu-card{background:var(--field);border:1px solid var(--line-strong);border-radius:9px;padding:11px 12px}
 .fu-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.fu-tid{font-family:IBM Plex Mono,monospace;font-size:12px;font-weight:600;color:#3E6B72}
-.fu-tac{font-size:11px;color:#7C6A55;text-transform:uppercase;letter-spacing:.04em}
-.fu-add{margin-left:auto;padding:4px 9px;border:1px solid #B0472C;border-radius:6px;background:#B0472C;
-  color:#F5F1E8;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
-.fu-add:hover{background:#8A3327}
-.fu-name{font-family:Fraunces,Georgia,serif;font-size:14px;color:#242A22;margin:6px 0 3px}
-.fu-why{font-size:12.5px;color:#4C5348}
+.fu-tid{font-family:IBM Plex Mono,monospace;font-size:12px;font-weight:600;color:var(--azure)}
+.fu-tac{font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
+.fu-add{margin-left:auto;padding:4px 9px;border:1px solid var(--accent);border-radius:6px;background:var(--accent);
+  color:#F6EFE6;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.fu-add:hover{background:var(--accent-deep)}
+.fu-name{font-family:Fraunces,Georgia,serif;font-size:14px;color:var(--ink);margin:6px 0 3px}
+.fu-why{font-size:12.5px;color:var(--ink-soft)}
 .fu-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .fu-badge{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;letter-spacing:.02em}
 .fu-badge.fb{background:#E7D9B8;color:#6B5B23}
 .fu-badge.ready{background:#D7E6D9;color:#2E5A3A}
-.fu-badge.wait{background:#E6DDD2;color:#7C6A55}
+.fu-badge.wait{background:#E6DDD2;color:var(--ink-faint)}
 .fu-badge.path{background:#D6E1EA;color:#2E4A5C}
-.fu-provides{margin-top:8px;font-size:11.5px;color:#7C6A55}
-.fu-cap{display:inline-block;background:#ECE7DA;border-radius:5px;padding:1px 6px;margin:2px 3px 0 0}
+.fu-provides{margin-top:8px;font-size:11.5px;color:var(--ink-faint)}
+.fu-cap{display:inline-block;background:var(--surface-2);border-radius:5px;padding:1px 6px;margin:2px 3px 0 0}
 
 /* ── Auth: login overlay & user chip ─────────────────────────── */
 .login-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
   background:rgba(38,30,18,0.55);backdrop-filter:blur(3px);padding:24px}
-.login-card{background:#F5F1E8;border:1px solid #BEB299;border-radius:14px;box-shadow:0 18px 60px rgba(38,30,18,0.35);
+.login-card{background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;box-shadow:0 18px 60px rgba(38,30,18,0.35);
   padding:34px 32px;width:100%;max-width:380px;font-family:Spectral,Georgia,serif}
 .login-brand{display:flex;align-items:center;gap:12px;margin-bottom:6px}
-.login-brand h1{font-family:Fraunces,Georgia,serif;font-size:26px;margin:0;color:#8C3620}
-.login-sub{color:#4C5348;font-size:14px;margin:0 0 20px}
-.login-card label{display:block;font-size:12.5px;font-weight:600;color:#4C5348;margin:12px 0 5px;letter-spacing:.02em}
-.login-card input{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #BEB299;border-radius:8px;
-  background:#FBF7EF;font-size:15px;font-family:inherit;color:#242A22}
-.login-card input:focus{outline:2px solid #B0472C;outline-offset:1px;border-color:#B0472C}
-.login-error{color:#B0472C;font-size:13px;min-height:18px;margin:10px 0 0}
-.login-btn{width:100%;margin-top:16px;padding:12px;border:none;border-radius:8px;background:#B0472C;color:#F5F1E8;
+.login-brand h1{font-family:Fraunces,Georgia,serif;font-size:26px;margin:0;color:var(--accent-deep)}
+.login-sub{color:var(--ink-soft);font-size:14px;margin:0 0 20px}
+.login-card label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin:12px 0 5px;letter-spacing:.02em}
+.login-card input{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line-strong);border-radius:8px;
+  background:var(--field);font-size:15px;font-family:inherit;color:var(--ink)}
+.login-card input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.login-error{color:var(--accent);font-size:13px;min-height:18px;margin:10px 0 0}
+.login-btn{width:100%;margin-top:16px;padding:12px;border:none;border-radius:8px;background:var(--accent);color:#F6EFE6;
   font-size:15px;font-weight:600;font-family:Fraunces,Georgia,serif;cursor:pointer}
-.login-btn:hover{background:#8A3327}.login-btn:disabled{opacity:.6;cursor:default}
+.login-btn:hover{background:var(--accent-deep)}.login-btn:disabled{opacity:.6;cursor:default}
 .user-chip{display:flex;align-items:center;gap:10px;margin-left:auto;align-self:flex-start}
-.user-name{font-size:12.5px;color:#4C5348;font-family:IBM Plex Mono,monospace}
-.logout-btn{padding:6px 12px;border:1px solid #BEB299;border-radius:7px;background:#F5F1E8;color:#8C3620;
+.user-name{font-size:12.5px;color:var(--ink-soft);font-family:IBM Plex Mono,monospace}
+.logout-btn{padding:6px 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--accent-deep);
   font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
-.logout-btn:hover{background:#ECE7DA}
+.logout-btn:hover{background:var(--surface-2)}
+
+/* ── Dark mode — charcoal survey chart ───────────────────────── */
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#12161A; --ground-2:#1B2026;
+  --surface:#1E242B; --surface-2:#272E35;
+  --ink:#EAE6DA; --ink-soft:#B2B0A4; --ink-faint:#7E8578;
+  --line:#333B42; --line-strong:#465059;
+  --accent:#D06A4E; --accent-deep:#B0472C;
+  --accent-weak:#2C211C; --accent-weak-2:#3A2A22;
+  --azure:#5FA0AB; --brass:#C6A25A; --brass-weak:#2E2A1E;
+  --good:#5AA37A; --warn:#D0A63A; --crit:#D2564A;
+  --field:#12161A;
+  --contour:rgba(95,160,171,.16);
+  --grid-minor:rgba(234,230,218,.05);
+  --grid-major:rgba(95,160,171,.17);
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 12px 26px -14px rgba(0,0,0,.62);
+  --shadow-lift: 0 3px 7px rgba(0,0,0,.55), 0 24px 48px -20px rgba(0,0,0,.7);
+}
+:root[data-theme="dark"] body{background:linear-gradient(180deg,#171C21 0%,#12161A 100%)}
+:root[data-theme="dark"] .topbar{background:linear-gradient(180deg,rgba(30,36,43,.96),rgba(24,29,34,.92))}
+:root[data-theme="dark"] .login-overlay{background:rgba(0,0,0,.62)}
+/* Legend/status chips that use fixed light tints in light mode */
+:root[data-theme="dark"] .fu-badge.fb{background:#3A331F;color:#D9C488}
+:root[data-theme="dark"] .fu-badge.ready{background:#20321F;color:#8FD0A0}
+:root[data-theme="dark"] .fu-badge.wait{background:#2C2A24;color:#C9BBA6}
+:root[data-theme="dark"] .fu-badge.path{background:#1E2E38;color:#A9CEE0}
+:root[data-theme="dark"] .tact,
+:root[data-theme="dark"] .toolchip,
+:root[data-theme="dark"] .fb,
+:root[data-theme="dark"] .pill,
+:root[data-theme="dark"] .tagchip,
+:root[data-theme="dark"] .chip,
+:root[data-theme="dark"] .mchip{background:var(--surface-2);color:var(--ink-soft);border-color:var(--line-strong)}
+.theme-toggle{padding:6px 10px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);
+  color:var(--accent-deep);font-size:13px;cursor:pointer;font-family:inherit;line-height:1}
+.theme-toggle:hover{background:var(--surface-2)}
 </style>
 
 <div class="map-bg" aria-hidden="true">
@@ -692,6 +730,7 @@ button{font-family:inherit}
 
         <div class="user-chip" id="userChip" hidden>
           <span class="user-name" id="userName"></span>
+          <button type="button" id="themeToggle" class="theme-toggle" title="Toggle light / dark" aria-label="Toggle theme">☾</button>
           <button type="button" id="logoutBtn" class="logout-btn">Sign out</button>
         </div>
       </div>
