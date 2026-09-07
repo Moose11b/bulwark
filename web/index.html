@@ -652,6 +652,21 @@ button{font-family:inherit}
 .brand-actions{display:flex;gap:8px;align-items:center;margin-top:6px}
 .brand-note{font-size:12px;color:var(--ink-faint)}
 
+/* ── Coverage heatmap ────────────────────────────────────────── */
+.heat-wrap{overflow-x:auto;padding:6px 0 10px}
+.heat{display:flex;gap:8px;align-items:flex-start;min-width:min-content}
+.heat-col{flex:0 0 108px;display:flex;flex-direction:column;gap:5px}
+.heat-th{font-size:10.5px;font-weight:600;color:var(--ink-soft);padding:0 0 5px;border-bottom:2px solid var(--line-strong);
+  text-transform:uppercase;letter-spacing:.03em;line-height:1.25;min-height:30px}
+.heat-th span{color:var(--ink-faint);font-family:var(--mono)}
+.heat-cell{border:1px solid var(--line);border-left-width:4px;border-radius:6px;padding:6px 8px;background:var(--surface);font-size:11.5px}
+.heat-cell .hc-tid{font-family:var(--mono);font-weight:600;font-size:11px}
+.hc-worked{border-left-color:var(--accent);background:var(--accent-weak)}
+.hc-failed{border-left-color:var(--crit)}
+.hc-attempted{border-left-color:var(--warn)}
+.hc-skipped{border-left-color:var(--line-strong);opacity:.72}
+.hc-planned{border-left-color:var(--azure)}
+
 /* ── Attack-path roadmap ─────────────────────────────────────── */
 .roadmap-wrap{overflow-x:auto;padding:6px 0 10px}
 .roadmap{display:block}

@@ -20,6 +20,29 @@ const OC = {
   skipped: { badge: '–', faint: 1 }, not_started: { faint: 1 },
 };
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, informational: 4 };
+const TACTIC_ORDER = ['reconnaissance', 'resource-development', 'initial-access', 'execution',
+  'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access', 'discovery',
+  'lateral-movement', 'collection', 'command-and-control', 'exfiltration', 'impact'];
+function ocClass(oc) {
+  if (oc === 'succeeded' || oc === 'fell_back') return 'hc-worked';
+  if (oc === 'failed' || oc === 'blocked') return 'hc-failed';
+  if (oc === 'attempted') return 'hc-attempted';
+  if (oc === 'skipped') return 'hc-skipped';
+  return 'hc-planned';
+}
+function heatmap(steps) {
+  if (!steps || !steps.length) return '<div class="sub">No techniques documented.</div>';
+  const by = {};
+  steps.forEach(s => { const t = s.tactic || 'other'; (by[t] = by[t] || []).push(s); });
+  const order = TACTIC_ORDER.filter(t => by[t]);
+  Object.keys(by).forEach(t => { if (!order.includes(t)) order.push(t); });
+  const cols = order.map(t => {
+    const col = TACTIC_COLOR[t] || '#8A6D3B';
+    const chips = by[t].map(s => `<div class="heat-cell ${ocClass(s.outcome)}" title="${esc(s.name || s.technique_id)}"><span class="hc-tid">${esc(s.technique_id)}</span></div>`).join('');
+    return `<div class="heat-col"><div class="heat-th" style="border-bottom-color:${col}">${esc(lbl(t))} <span>${by[t].length}</span></div>${chips}</div>`;
+  }).join('');
+  return `<div class="heat-wrap"><div class="heat">${cols}</div></div>`;
+}
 
 function roadmap(steps) {
   if (!steps || !steps.length) return '';
@@ -93,6 +116,10 @@ function render(rep, token) {
       <h2>Attack path</h2>
       <div class="legend"><span><i class="lg w"></i>Worked (solid = path to objective)</span><span><i class="lg f"></i>Failed / blocked</span><span><i class="lg s"></i>Skipped</span></div>
       ${roadmap(rep.steps) || '<div class="sub">No steps documented.</div>'}
+
+      <h2>Coverage heatmap</h2>
+      <div class="legend"><span><i class="lg w"></i>Worked</span><span><i class="lg f"></i>Failed / blocked</span><span><i class="lg s"></i>Skipped / planned</span><span style="color:var(--ink-faint)">columns = ATT&CK tactics</span></div>
+      ${heatmap(rep.steps)}
 
       <h2>Executive summary</h2>
       <div class="cov">${cov.coverage_pct != null ? cov.coverage_pct : 0}%</div>

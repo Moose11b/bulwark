@@ -34,6 +34,19 @@ h3{font-family:var(--display);font-size:15.5px;margin:16px 0 4px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .lg{width:11px;height:11px;border-radius:50%;border:2px solid var(--line-strong)}
 .lg.w{background:var(--accent);border-color:var(--accent)}.lg.f{border-color:#9C2B1B}.lg.s{border-style:dashed}
+.heat-wrap{overflow-x:auto;padding:6px 0 10px}
+.heat{display:flex;gap:8px;align-items:flex-start;min-width:min-content}
+.heat-col{flex:0 0 108px;display:flex;flex-direction:column;gap:5px}
+.heat-th{font-size:10.5px;font-weight:600;color:var(--ink-soft);padding:0 0 5px;border-bottom:2px solid var(--line-strong);
+  text-transform:uppercase;letter-spacing:.03em;line-height:1.25;min-height:30px}
+.heat-th span{color:var(--ink-faint);font-family:var(--mono)}
+.heat-cell{border:1px solid var(--line);border-left-width:4px;border-radius:6px;padding:6px 8px;background:#FBF7EF;font-size:11.5px}
+.heat-cell .hc-tid{font-family:var(--mono);font-weight:600;font-size:11px}
+.hc-worked{border-left-color:var(--accent);background:#F0E1D6}
+.hc-failed{border-left-color:#9C2B1B}
+.hc-attempted{border-left-color:#B08814}
+.hc-skipped{border-left-color:var(--line-strong);opacity:.72}
+.hc-planned{border-left-color:var(--azure)}
 .cov{font-family:var(--display);font-size:26px;color:var(--accent-deep)}
 .finding{border:1px solid var(--line);border-radius:9px;padding:13px 15px;margin:10px 0;background:#FBF7EF}
 .finding h3{margin:0 0 6px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
