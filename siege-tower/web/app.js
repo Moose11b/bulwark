@@ -83,7 +83,9 @@ async function api(path, opts){
   opts = opts || {};
   const headers = Object.assign({}, opts.headers || {});
   if (AUTH_TOKEN) headers['Authorization'] = 'Bearer ' + AUTH_TOKEN;
-  if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  // Don't force JSON on FormData — the browser must set the multipart boundary.
+  const isForm = (typeof FormData !== 'undefined') && (opts.body instanceof FormData);
+  if (opts.body && !isForm && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   const res = await fetch(path, Object.assign({}, opts, { headers }));
   if (res.status === 401){ setToken(null); CURRENT_USER = null; showLogin(); throw new Error('unauthorized'); }
   return res;
@@ -528,6 +530,10 @@ function openReport(){
     <div class="covbig"><span class="n tnum">${pct}%</span><span style="color:var(--ink-soft)">of the ${state.plan.length}-step plan documented (${worked} worked)</span></div>
     <div style="margin-top:14px">${rows||'<div class="rv" style="color:var(--ink-faint)">Add pieces to the board and document them to populate the log.</div>'}</div>
     <p style="margin-top:22px;font-size:12px;color:var(--ink-faint)">Compiled by Siege Tower — a planning &amp; documentation artifact. Mirrors the JSON / Markdown report the Bulwark API produces from the same data.</p>`;
+  const dlNote=$('#repDlNote');
+  if(dlNote) dlNote.textContent = state.engagementId
+    ? 'Downloads reflect the last saved version.'
+    : 'Save the engagement to enable downloads.';
   $('#scrim').classList.add('open');
 }
 
@@ -581,8 +587,228 @@ $('#histToggle').onclick=()=>{ state.authorized=!state.authorized; renderHistory
 $('#reportBtn').onclick=openReport;
 $('#saveBtn').onclick=saveEngagement;
 $('#repClose').onclick=()=>$('#scrim').classList.remove('open');
+document.querySelectorAll('#repDownloads .dl-btn').forEach(b=>b.onclick=()=>downloadReport(b.dataset.fmt));
+
+// Download the server-compiled report (includes findings + evidence) for the
+// saved engagement. Uses the auth wrapper, so the bearer token is sent.
+async function downloadReport(fmt){
+  const note=$('#repDlNote');
+  if(!state.engagementId){ if(note) note.textContent='Save the engagement first to download.'; return; }
+  if(note) note.textContent='Preparing…';
+  try{
+    const res=await api('/api/engagements/'+state.engagementId+'/report?format='+fmt);
+    if(!res.ok){ if(note) note.textContent='Download failed.'; return; }
+    const blob=await res.blob();
+    const ext=(fmt==='markdown')?'md':fmt;
+    const base=($('#fName').value||'engagement').replace(/[^\w.-]+/g,'_');
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=base+'.'+ext;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    if(note) note.textContent='';
+  }catch(e){ if(note) note.textContent='Download failed.'; }
+}
 $('#scrim').onclick=e=>{ if(e.target===$('#scrim')) $('#scrim').classList.remove('open'); };
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('#scrim').classList.remove('open'); });
+
+/* ── Findings manager ─────────────────────────────────────────── */
+const SEV_OPTS=['','critical','high','medium','low','informational'];
+const STATUS_OPTS=['open','in_remediation','retest','fixed','risk_accepted','false_positive'];
+const findState={items:[],selected:null};
+let _cvssTimer=null;
+
+function openFindings(){
+  if(!state.engagementId){
+    const n=$('#execNote'); if(n) n.textContent='Saving engagement…';
+    saveEngagement().then(()=>{ if(state.engagementId){ _openFindingsModal(); } else if(n){ n.textContent='Save first to add findings.'; } });
+    return;
+  }
+  _openFindingsModal();
+}
+function _openFindingsModal(){ $('#findScrim').classList.add('open'); loadFindingsList().then(()=>renderFindingEditor(null)); }
+function closeFindings(){ $('#findScrim').classList.remove('open'); }
+
+async function loadFindingsList(){
+  try{ const r=await api('/api/findings?engagement_id='+encodeURIComponent(state.engagementId));
+    findState.items=(await r.json()).findings||[]; }catch(e){ findState.items=[]; }
+  renderFindingsList();
+}
+function renderFindingsList(){
+  const box=$('#findItems'); box.innerHTML='';
+  if(!findState.items.length){ box.innerHTML='<p style="color:var(--ink-faint);font-size:13px;padding:10px">No findings yet. Create one, or seed from the library.</p>'; return; }
+  findState.items.forEach(f=>{
+    const d=el('div','find-item'+(findState.selected===f.id?' sel':''));
+    const sev=f.severity||'none';
+    d.innerHTML=`<h4>${esc(f.title)||'Untitled'}</h4><div class="fi-meta">
+      <span class="sev-chip sev-${esc(sev)}">${esc(sev)}</span>
+      <span class="st-chip">${esc((f.status||'open').replace(/_/g,' '))}</span>
+      ${f.cvss_score!=null?`<span class="st-chip">CVSS ${esc(f.cvss_score)}</span>`:''}</div>`;
+    d.onclick=()=>{ findState.selected=f.id; renderFindingsList(); selectFinding(f.id); };
+    box.appendChild(d);
+  });
+}
+async function selectFinding(id){
+  try{ const f=await (await api('/api/findings/'+id)).json(); renderFindingEditor(f); }catch(e){}
+}
+
+function _opt(v,sel){ return `<option value="${esc(v)}"${v===sel?' selected':''}>${esc(v?v.replace(/_/g,' '):'— none —')}</option>`; }
+function _csv(a){ return (a||[]).join(', '); }
+function _splitCsv(s){ return (s||'').split(',').map(x=>x.trim()).filter(Boolean); }
+
+function renderFindingEditor(f){
+  const ed=$('#findEditor'); const isNew=!f;
+  f=f||{status:'open',severity:'',affected_assets:[],references:[],technique_ids:[],tags:[],evidence_ids:[]};
+  ed.innerHTML=`
+    <div class="fe-row"><div class="fe-field" style="flex:2"><label>Title</label>
+      <input id="fe_title" value="${esc(f.title)}" placeholder="e.g. Unauthenticated RCE in portal"></div></div>
+    <div class="fe-row">
+      <div class="fe-field"><label>CVSS vector</label>
+        <input id="fe_cvss" value="${esc(f.cvss_vector)}" placeholder="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H">
+        <div class="fe-cvss-out" id="fe_cvss_out"></div></div>
+      <div class="fe-field"><label>Severity</label>
+        <select id="fe_severity">${SEV_OPTS.map(s=>_opt(s,f.severity||'')).join('')}</select></div>
+      <div class="fe-field"><label>Status</label>
+        <select id="fe_status">${STATUS_OPTS.map(s=>_opt(s,f.status||'open')).join('')}</select></div>
+    </div>
+    <div class="fe-field"><label>Affected assets (comma-separated)</label>
+      <input id="fe_assets" value="${esc(_csv(f.affected_assets))}" placeholder="host, url, IP"></div>
+    <div class="fe-field"><label>Description</label><textarea id="fe_desc">${esc(f.description)}</textarea></div>
+    <div class="fe-field"><label>Impact</label><textarea id="fe_impact">${esc(f.impact)}</textarea></div>
+    <div class="fe-field"><label>Reproduction</label><textarea id="fe_repro">${esc(f.reproduction)}</textarea></div>
+    <div class="fe-field"><label>Remediation</label><textarea id="fe_remed">${esc(f.remediation)}</textarea></div>
+    <div class="fe-row">
+      <div class="fe-field"><label>ATT&CK technique IDs (comma)</label>
+        <input id="fe_tids" value="${esc(_csv(f.technique_ids))}" placeholder="T1190, T1059"></div>
+      <div class="fe-field"><label>CWE</label><input id="fe_cwe" value="${esc(f.cwe)}" placeholder="CWE-89"></div>
+    </div>
+    <div class="fe-row">
+      <div class="fe-field"><label>References (comma)</label><input id="fe_refs" value="${esc(_csv(f.references))}"></div>
+      <div class="fe-field"><label>Tags (comma)</label><input id="fe_tags" value="${esc(_csv(f.tags))}"></div>
+    </div>
+    <div class="fe-field"><label>Evidence</label>
+      <div class="ev-list" id="fe_evlist"></div>
+      <div id="fe_evupload"></div></div>
+    <div class="fe-actions">
+      <button type="button" class="btn btn-primary" id="fe_save">${isNew?'Create finding':'Save changes'}</button>
+      ${isNew?'':'<button type="button" class="btn btn-ghost" id="fe_retest">Retest…</button>'}
+      ${isNew?'':'<button type="button" class="btn btn-ghost" id="fe_tolib">Save to library</button>'}
+      ${isNew?'':'<button type="button" class="btn btn-ghost" id="fe_del">Delete</button>'}
+      <span class="fe-note" id="fe_note"></span>
+    </div>`;
+  // CVSS live scoring.
+  const cvssIn=$('#fe_cvss');
+  const scoreNow=()=>{ const v=cvssIn.value.trim(); const out=$('#fe_cvss_out');
+    if(!v){ out.textContent=''; return; }
+    api('/api/cvss?vector='+encodeURIComponent(v)).then(r=>r.json()).then(d=>{
+      if(d.score!=null){ out.textContent='Score '+d.score+' · '+d.severity; out.style.color='#7C2A20';
+        if(!$('#fe_severity').value) $('#fe_severity').value=d.severity;
+      } else { out.textContent=d.version==='4.0'?'v4.0 — enter severity manually':'—'; out.style.color='var(--ink-faint)'; }
+    }).catch(()=>{});
+  };
+  cvssIn.oninput=()=>{ clearTimeout(_cvssTimer); _cvssTimer=setTimeout(scoreNow,400); };
+  if(f.cvss_vector) scoreNow();
+  $('#fe_save').onclick=()=>saveFinding(f.id);
+  if(!isNew){
+    $('#fe_del').onclick=()=>deleteFinding(f.id);
+    $('#fe_tolib').onclick=()=>saveToLibrary(f.id);
+    $('#fe_retest').onclick=()=>doRetest(f.id);
+    renderEvidence(f.id);
+  } else {
+    $('#fe_evupload').innerHTML='<p class="fe-note">Save the finding first to attach evidence.</p>';
+  }
+}
+
+function collectFindingForm(){
+  return {
+    title:$('#fe_title').value.trim(), cvss_vector:$('#fe_cvss').value.trim()||null,
+    severity:$('#fe_severity').value||null, status:$('#fe_status').value,
+    affected_assets:_splitCsv($('#fe_assets').value),
+    description:$('#fe_desc').value, impact:$('#fe_impact').value,
+    reproduction:$('#fe_repro').value, remediation:$('#fe_remed').value,
+    technique_ids:_splitCsv($('#fe_tids').value), cwe:$('#fe_cwe').value.trim()||null,
+    references:_splitCsv($('#fe_refs').value), tags:_splitCsv($('#fe_tags').value),
+  };
+}
+async function saveFinding(id){
+  const note=$('#fe_note'); const body=collectFindingForm();
+  if(!body.title){ if(note) note.textContent='Title is required.'; return; }
+  try{
+    let res, saved;
+    if(id){ res=await api('/api/findings/'+id,{method:'PUT',body:JSON.stringify(body)}); }
+    else { body.engagement_id=state.engagementId; res=await api('/api/findings',{method:'POST',body:JSON.stringify(body)}); }
+    if(!res.ok){ if(note) note.textContent='Save failed.'; return; }
+    saved=await res.json();
+    findState.selected=saved.id;
+    await loadFindingsList(); renderFindingEditor(saved);
+    const n2=$('#fe_note'); if(n2) n2.textContent='Saved.';
+  }catch(e){ if(note) note.textContent='Save failed.'; }
+}
+async function deleteFinding(id){
+  try{ await api('/api/findings/'+id,{method:'DELETE'}); }catch(e){}
+  findState.selected=null; await loadFindingsList(); renderFindingEditor(null);
+}
+async function saveToLibrary(id){
+  const note=$('#fe_note');
+  try{ const r=await api('/api/findings/'+id+'/save-to-library',{method:'POST'});
+    if(note) note.textContent=r.ok?'Saved to library.':'Failed.'; }catch(e){ if(note) note.textContent='Failed.'; }
+}
+async function doRetest(id){
+  const status=prompt('New status (open, in_remediation, retest, fixed, risk_accepted, false_positive):','fixed');
+  if(!status) return;
+  const note=prompt('Retest note (optional):','')||null;
+  try{ const r=await api('/api/findings/'+id+'/retest',{method:'POST',body:JSON.stringify({status,note})});
+    if(r.ok){ const f=await r.json(); await loadFindingsList(); renderFindingEditor(f); }
+    else { const n=$('#fe_note'); if(n) n.textContent='Retest failed (check status value).'; }
+  }catch(e){}
+}
+
+async function renderEvidence(fid){
+  const up=$('#fe_evupload'), list=$('#fe_evlist'); if(!up) return;
+  up.innerHTML='<input type="file" id="fe_evfile"><button type="button" class="btn btn-ghost" id="fe_evadd" style="margin-left:8px;font-size:13px;padding:7px 11px">Upload evidence</button>';
+  $('#fe_evadd').onclick=async()=>{
+    const inp=$('#fe_evfile'); if(!inp.files||!inp.files[0]) return;
+    const fd=new FormData(); fd.append('file',inp.files[0]); fd.append('finding_id',fid); fd.append('engagement_id',state.engagementId);
+    const note=$('#fe_note'); if(note) note.textContent='Uploading…';
+    try{ const r=await api('/api/evidence',{method:'POST',body:fd});
+      if(note) note.textContent=r.ok?'Evidence uploaded.':'Upload failed.'; renderEvidence(fid);
+    }catch(e){ if(note) note.textContent='Upload failed.'; }
+  };
+  try{ const evs=(await (await api('/api/evidence?finding_id='+fid)).json()).evidence||[];
+    list.innerHTML=evs.map(e=>`<div class="ev-row"><span class="ev-name">${esc(e.filename)}</span>
+      <span style="color:var(--ink-faint);font-size:11px">${(e.size/1024).toFixed(1)} KB · ${esc(String(e.sha256).slice(0,10))}…</span>
+      <button data-ev="${esc(e.id)}" data-fn="${esc(e.filename)}">Download</button></div>`).join('')
+      ||'<span class="fe-note">No evidence attached.</span>';
+    list.querySelectorAll('[data-ev]').forEach(b=>b.onclick=()=>downloadEvidence(b.dataset.ev,b.dataset.fn));
+  }catch(e){}
+}
+async function downloadEvidence(id,filename){
+  try{ const r=await api('/api/evidence/'+id+'/download'); if(!r.ok) return;
+    const blob=await r.blob(); const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=filename||'evidence'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){}
+}
+async function findingsFromLibrary(){
+  let items=[];
+  try{ items=(await (await api('/api/library')).json()).library||[]; }catch(e){}
+  const ed=$('#findEditor');
+  if(!items.length){ ed.innerHTML='<div class="fe-empty">The library is empty. Create a finding and use “Save to library” to add a reusable template.</div>'; return; }
+  ed.innerHTML='<h3 style="font-family:Fraunces,Georgia,serif;color:#7C2A20;margin:0 0 10px">Instantiate from library</h3>'+
+    items.map(it=>`<div class="find-item" data-lib="${esc(it.id)}"><h4>${esc(it.title)}</h4>
+      <div class="fi-meta"><span class="sev-chip sev-${esc(it.severity||'none')}">${esc(it.severity||'none')}</span>
+      ${it.cvss_score!=null?`<span class="st-chip">CVSS ${esc(it.cvss_score)}</span>`:''}</div></div>`).join('');
+  ed.querySelectorAll('[data-lib]').forEach(d=>d.onclick=async()=>{
+    try{ const r=await api('/api/library/'+d.dataset.lib+'/instantiate?engagement_id='+encodeURIComponent(state.engagementId),{method:'POST'});
+      if(r.ok){ const f=await r.json(); findState.selected=f.id; await loadFindingsList(); renderFindingEditor(f); }
+    }catch(e){}
+  });
+}
+
+$('#findingsBtn').onclick=openFindings;
+$('#findClose').onclick=closeFindings;
+$('#findNew').onclick=()=>{ findState.selected=null; renderFindingsList(); renderFindingEditor(null); };
+$('#findFromLib').onclick=findingsFromLibrary;
+$('#findScrim').onclick=e=>{ if(e.target===$('#findScrim')) closeFindings(); };
 
 /* ── Login ────────────────────────────────────────────────────── */
 function showLogin(msg){
