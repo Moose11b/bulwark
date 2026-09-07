@@ -68,15 +68,26 @@ function findingHTML(f) {
 
 function render(rep, token) {
   const e = rep.engagement || {}, roe = rep.roe || {}, cov = rep.coverage || {};
+  const brand = rep.branding || {};
+  // Apply org branding: accent colour and (below) logo / company / footer.
+  if (brand.accent && /^#[0-9A-Fa-f]{6}$/.test(brand.accent)) {
+    document.documentElement.style.setProperty('--accent', brand.accent);
+    document.documentElement.style.setProperty('--accent-deep', brand.accent);
+  }
+  const preparedBy = brand.company_name || rep.org_name || '—';
+  const conf = brand.confidentiality || 'CONFIDENTIAL';
+  const logo = brand.logo_data_uri
+    ? `<img src="${esc(brand.logo_data_uri)}" alt="" style="max-height:64px;max-width:220px;display:block;margin-bottom:14px">` : '';
   let findings = (rep.findings || []).slice().sort((a, b) =>
     (SEV_ORDER[a.severity] ?? 5) - (SEV_ORDER[b.severity] ?? 5) || String(a.title).localeCompare(String(b.title)));
   const dl = `/api/share/${encodeURIComponent(token)}/download`;
   $('#content').innerHTML = `
     <div class="doc">
+      ${logo}
       <p class="eyebrow">Penetration Test Report</p>
       <h1>${esc(e.name) || 'Engagement Report'}</h1>
-      <div class="sub">Client: ${esc(e.client) || '—'} · Prepared by: ${esc(rep.org_name) || '—'} · Objective: ${esc(lbl(e.objective))}</div>
-      <p class="banner">CONFIDENTIAL — authorized assessment record. Planning and documentation only.</p>
+      <div class="sub">Client: ${esc(e.client) || '—'} · Prepared by: ${esc(preparedBy)} · Objective: ${esc(lbl(e.objective))}</div>
+      <p class="banner">${esc(conf)} — authorized assessment record. Planning and documentation only.</p>
       <div class="dl"><a href="${dl}?format=pdf">Download PDF</a><a href="${dl}?format=docx">Download DOCX</a><a href="${dl}?format=markdown">Markdown</a></div>
 
       <h2>Attack path</h2>
@@ -97,6 +108,7 @@ function render(rep, token) {
       <h2>Findings</h2>
       ${findings.length ? findings.map(findingHTML).join('') : '<div class="sub">No findings recorded.</div>'}
 
+      ${brand.footer ? `<div class="foot">${esc(brand.footer)}</div>` : ''}
       <div class="foot">Shared via Siege Tower — this is a read-only view.</div>
     </div>`;
   $('#message').hidden = true;

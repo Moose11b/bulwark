@@ -953,6 +953,9 @@ $('#findImportFile').onchange=e=>importScan(e.target);
 $('#findNew').onclick=()=>{ findState.selected=null; renderFindingsList(); renderFindingEditor(null); };
 $('#findFromLib').onclick=findingsFromLibrary;
 $('#findScrim').onclick=e=>{ if(e.target===$('#findScrim')) closeFindings(); };
+$('#brandBtn').onclick=openBranding;
+$('#brandClose').onclick=closeBranding;
+$('#brandScrim').onclick=e=>{ if(e.target===$('#brandScrim')) closeBranding(); };
 
 /* ── Login ────────────────────────────────────────────────────── */
 function showLogin(msg){
@@ -991,8 +994,76 @@ async function logout(){
 
 function refreshUserChip(){
   const chip=$('#userChip'); if(!chip) return;
-  if(CURRENT_USER){ chip.hidden=false; $('#userName').textContent=CURRENT_USER.username+' · '+CURRENT_USER.role; }
-  else chip.hidden=true;
+  if(CURRENT_USER){ chip.hidden=false; $('#userName').textContent=CURRENT_USER.username+' · '+CURRENT_USER.role;
+    const bb=$('#brandBtn'); if(bb) bb.hidden = (CURRENT_USER.role!=='admin');
+  } else chip.hidden=true;
+}
+
+/* ── Branding settings (admin) ────────────────────────────────── */
+async function openBranding(){
+  $('#brandScrim').classList.add('open');
+  const body=$('#brandBody'); body.innerHTML='<div class="brand-note">Loading…</div>';
+  let b={};
+  try{ b=await (await api('/api/branding')).json(); }catch(e){}
+  const accent=(b.accent&&/^#[0-9A-Fa-f]{6}$/.test(b.accent))?b.accent:'#B0472C';
+  body.innerHTML=`
+    <div class="brand-note" style="margin-bottom:14px">Applied to your reports (PDF / DOCX), the report modal, and shared client links.</div>
+    <div class="fe-field"><label>Accent colour</label>
+      <div class="brand-color"><input type="color" id="brAccent" value="${esc(accent)}">
+        <input type="text" id="brAccentHex" value="${esc(accent)}" style="max-width:130px" spellcheck="false"></div></div>
+    <div class="fe-field"><label>Company name (shown as “Prepared by”)</label>
+      <input type="text" id="brCompany" value="${esc(b.company_name)}" placeholder="Your consultancy name"></div>
+    <div class="fe-field"><label>Confidentiality label</label>
+      <input type="text" id="brConf" value="${esc(b.confidentiality)}" placeholder="CONFIDENTIAL"></div>
+    <div class="fe-field"><label>Report footer</label>
+      <input type="text" id="brFooter" value="${esc(b.footer)}" placeholder="© Your Company · Confidential"></div>
+    <div class="fe-field"><label>Logo</label>
+      <div class="brand-logo">
+        <img id="brLogoImg" alt="logo" ${b.has_logo?'':'hidden'} src="${b.has_logo?('/api/branding/logo?t='+Date.now()):''}">
+        <div>
+          <input type="file" id="brLogoFile" accept="image/*" hidden>
+          <div class="brand-actions">
+            <button type="button" class="share-mini" id="brLogoBtn">Upload logo</button>
+            ${b.has_logo?'<button type="button" class="share-mini" id="brLogoDel">Remove</button>':''}
+          </div>
+          <div class="brand-note" style="margin-top:5px">PNG/JPG/SVG, up to 256 KB.</div>
+        </div>
+      </div></div>
+    <div class="brand-actions"><button type="button" class="btn btn-primary" id="brSave">Save</button>
+      <span class="brand-note" id="brNote"></span></div>`;
+  // Sync color <-> hex
+  const col=$('#brAccent'), hex=$('#brAccentHex');
+  col.oninput=()=>{ hex.value=col.value; };
+  hex.oninput=()=>{ if(/^#[0-9A-Fa-f]{6}$/.test(hex.value)) col.value=hex.value; };
+  $('#brSave').onclick=saveBranding;
+  $('#brLogoBtn').onclick=()=>$('#brLogoFile').click();
+  $('#brLogoFile').onchange=e=>uploadLogo(e.target);
+  const del=$('#brLogoDel'); if(del) del.onclick=deleteLogo;
+}
+function closeBranding(){ $('#brandScrim').classList.remove('open'); }
+
+async function saveBranding(){
+  const note=$('#brNote'); const hex=$('#brAccentHex').value.trim();
+  if(hex && !/^#[0-9A-Fa-f]{6}$/.test(hex)){ if(note) note.textContent='Accent must be a #RRGGBB colour.'; return; }
+  const body={ accent:hex||null, company_name:$('#brCompany').value.trim()||null,
+    confidentiality:$('#brConf').value.trim()||null, footer:$('#brFooter').value.trim()||null };
+  if(note) note.textContent='Saving…';
+  try{ const r=await api('/api/branding',{method:'PUT',body:JSON.stringify(body)});
+    if(note) note.textContent=r.ok?'Saved.':'Save failed.'; }catch(e){ if(note) note.textContent='Save failed.'; }
+}
+async function uploadLogo(inp){
+  const note=$('#brNote'); if(!inp.files||!inp.files[0]) return;
+  const fd=new FormData(); fd.append('file',inp.files[0]);
+  if(note) note.textContent='Uploading logo…';
+  try{ const r=await api('/api/branding/logo',{method:'POST',body:fd});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); if(note) note.textContent=(d.detail||'Upload failed.'); return; }
+    if(note) note.textContent='Logo updated.'; openBranding();
+  }catch(e){ if(note) note.textContent='Upload failed.'; }
+  finally{ inp.value=''; }
+}
+async function deleteLogo(){
+  try{ await api('/api/branding/logo',{method:'DELETE'}); }catch(e){}
+  openBranding();
 }
 
 /* ── Boot ─────────────────────────────────────────────────────── */

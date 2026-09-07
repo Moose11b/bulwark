@@ -235,6 +235,28 @@ def _lbl(v) -> str:
     return str(v).replace("_", " ").replace("-", " ").title() if v else "—"
 
 
+def _logo_bytes(branding: dict):
+    uri = (branding or {}).get("logo_data_uri")
+    if not uri:
+        return None
+    import base64
+    import re
+    m = re.match(r"data:[^;]+;base64,(.*)", uri, re.S)
+    if not m:
+        return None
+    try:
+        return base64.b64decode(m.group(1))
+    except Exception:
+        return None
+
+
+def _accent_hex(branding: dict) -> str:
+    acc = (branding or {}).get("accent")
+    if isinstance(acc, str) and len(acc.lstrip("#")) == 6:
+        return acc.lstrip("#")
+    return _ACCENT
+
+
 # ── DOCX ──────────────────────────────────────────────────────────
 
 def to_docx(ctx: dict) -> bytes:
@@ -247,23 +269,35 @@ def to_docx(ctx: dict) -> bytes:
     cov = ctx.get("coverage", {})
     findings = _sorted_findings(ctx.get("findings", []))
     counts = _severity_counts(findings)
-    org_name = ctx.get("org_name") or "—"
+    branding = ctx.get("branding") or {}
+    org_name = branding.get("company_name") or ctx.get("org_name") or "—"
+    accent = _accent_hex(branding)
+    conf = branding.get("confidentiality") or "CONFIDENTIAL"
 
     doc = Document()
 
     def _h1(text: str):
         h = doc.add_heading(level=1)
         r = h.add_run(text)
-        r.font.color.rgb = RGBColor.from_string(_ACCENT)
+        r.font.color.rgb = RGBColor.from_string(accent)
         return h
 
-    # Cover.
+    # Cover — optional org logo.
+    logo = _logo_bytes(branding)
+    if logo:
+        from docx.shared import Inches
+        try:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.add_run().add_picture(io.BytesIO(logo), width=Inches(1.7))
+        except Exception:
+            pass
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = title.add_run(eng.get("name") or "Engagement Report")
     run.bold = True
     run.font.size = Pt(26)
-    run.font.color.rgb = RGBColor.from_string(_ACCENT)
+    run.font.color.rgb = RGBColor.from_string(accent)
     sub = doc.add_paragraph()
     sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
     sub.add_run("Penetration Test Report").font.size = Pt(14)
@@ -275,7 +309,7 @@ def to_docx(ctx: dict) -> bytes:
     ).font.size = Pt(10)
     note = doc.add_paragraph()
     note.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = note.add_run("CONFIDENTIAL — Authorized assessment record. Planning and documentation only.")
+    r = note.add_run(f"{conf} — Authorized assessment record. Planning and documentation only.")
     r.italic = True
     r.font.size = Pt(9)
     doc.add_page_break()
@@ -378,6 +412,13 @@ def to_docx(ctx: dict) -> bytes:
         if s.get("notes"):
             doc.add_paragraph(s["notes"])
 
+    if branding.get("footer"):
+        f = doc.add_paragraph()
+        f.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        fr = f.add_run(branding["footer"])
+        fr.italic = True
+        fr.font.size = Pt(8)
+
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
@@ -392,7 +433,7 @@ def to_pdf(ctx: dict) -> bytes:
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
     from reportlab.platypus import (
-        PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+        Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
     )
     from xml.sax.saxutils import escape
 
@@ -401,20 +442,37 @@ def to_pdf(ctx: dict) -> bytes:
     cov = ctx.get("coverage", {})
     findings = _sorted_findings(ctx.get("findings", []))
     counts = _severity_counts(findings)
-    org_name = ctx.get("org_name") or "—"
+    branding = ctx.get("branding") or {}
+    org_name = branding.get("company_name") or ctx.get("org_name") or "—"
+    accent = "#" + _accent_hex(branding)
+    conf = branding.get("confidentiality") or "CONFIDENTIAL"
 
     styles = getSampleStyleSheet()
     h1, h2, body = styles["Heading1"], styles["Heading2"], styles["BodyText"]
     center = ParagraphStyle("center", parent=body, alignment=TA_CENTER)
     cover_title = ParagraphStyle("cover", parent=styles["Title"], fontSize=26, spaceAfter=12,
-                                textColor=colors.HexColor("#"+_ACCENT))
-    h1.textColor = colors.HexColor("#"+_ACCENT)
+                                textColor=colors.HexColor(accent))
+    h1.textColor = colors.HexColor(accent)
 
     def esc(v) -> str:
         return escape(str(v)) if v is not None else "—"
 
     story: list = []
-    story.append(Spacer(1, 1.6 * inch))
+    logo = _logo_bytes(branding)
+    if logo:
+        try:
+            img = Image(io.BytesIO(logo))
+            ratio = (img.imageHeight / img.imageWidth) if img.imageWidth else 1
+            img.drawWidth = 1.8 * inch
+            img.drawHeight = 1.8 * inch * ratio
+            img.hAlign = "CENTER"
+            story.append(Spacer(1, 1.0 * inch))
+            story.append(img)
+            story.append(Spacer(1, 0.35 * inch))
+        except Exception:
+            story.append(Spacer(1, 1.6 * inch))
+    else:
+        story.append(Spacer(1, 1.6 * inch))
     story.append(Paragraph(esc(eng.get("name") or "Engagement Report"), cover_title))
     story.append(Paragraph("Penetration Test Report", center))
     story.append(Spacer(1, 0.3 * inch))
@@ -423,7 +481,7 @@ def to_pdf(ctx: dict) -> bytes:
     story.append(Paragraph(f"Generated {esc(_now_str())}", center))
     story.append(Spacer(1, 0.3 * inch))
     story.append(Paragraph(
-        "<i>CONFIDENTIAL — Authorized assessment record. Planning and documentation only.</i>",
+        f"<i>{esc(conf)} — Authorized assessment record. Planning and documentation only.</i>",
         center))
     story.append(PageBreak())
 
@@ -514,6 +572,10 @@ def to_pdf(ctx: dict) -> bytes:
         story.append(Paragraph("<i>" + esc(" · ".join(b for b in meta_bits if b)) + "</i>", body))
         if s.get("notes"):
             story.append(Paragraph(esc(s["notes"]), body))
+
+    if branding.get("footer"):
+        story.append(Spacer(1, 0.3 * inch))
+        story.append(Paragraph(f"<i>{esc(branding['footer'])}</i>", center))
 
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=letter,

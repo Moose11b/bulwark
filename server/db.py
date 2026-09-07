@@ -158,6 +158,10 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
             """
         )
+        # Lightweight migration: add orgs.branding to pre-existing databases.
+        cols = [r[1] for r in c.execute("PRAGMA table_info(orgs)").fetchall()]
+        if "branding" not in cols:
+            c.execute("ALTER TABLE orgs ADD COLUMN branding TEXT")
 
 
 # ── Orgs & users ─────────────────────────────────────────────────
@@ -176,6 +180,26 @@ def get_org(org_id: str) -> dict | None:
     with _conn() as c:
         row = c.execute("SELECT * FROM orgs WHERE id=?", (org_id,)).fetchone()
     return {"id": row["id"], "name": row["name"], "created_at": row["created_at"]} if row else None
+
+
+def get_branding(org_id: str) -> dict:
+    with _conn() as c:
+        row = c.execute("SELECT branding FROM orgs WHERE id=?", (org_id,)).fetchone()
+    if row and row["branding"]:
+        try:
+            return json.loads(row["branding"])
+        except ValueError:
+            return {}
+    return {}
+
+
+def set_branding(org_id: str, data: dict) -> dict:
+    merged = {**get_branding(org_id), **data}
+    # Drop keys explicitly set to None (a way to clear a field).
+    merged = {k: v for k, v in merged.items() if v is not None}
+    with _conn() as c:
+        c.execute("UPDATE orgs SET branding=? WHERE id=?", (json.dumps(merged), org_id))
+    return merged
 
 
 def count_users() -> int:
