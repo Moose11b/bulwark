@@ -91,3 +91,23 @@ def test_unsupported_format_rejected(client, engagement_with_finding):
     h, eid = engagement_with_finding
     assert client.get(f"/api/engagements/{eid}/report?format=xml",
                       headers=h).status_code == 400
+
+
+def test_navigator_layer_export(client, engagement_with_finding):
+    h, eid = engagement_with_finding
+    r = client.get(f"/api/engagements/{eid}/navigator", headers=h)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    assert r.headers["content-disposition"].startswith("attachment")
+    layer = r.json()
+    assert layer["domain"] == "enterprise-attack"
+    assert layer["versions"]["navigator"]
+    # The finding cited T1190, so it must appear as a technique in the layer.
+    tids = {t["techniqueID"] for t in layer["techniques"]}
+    assert "T1190" in tids
+    assert any("legendItems" == k for k in layer)
+
+
+def test_navigator_requires_auth(client, engagement_with_finding):
+    _h, eid = engagement_with_finding
+    assert client.get(f"/api/engagements/{eid}/navigator").status_code == 401

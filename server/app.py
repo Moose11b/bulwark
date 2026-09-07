@@ -645,6 +645,24 @@ def engagement_report(eid: str, format: str = "json",
     return rep
 
 
+@app.get("/api/engagements/{eid}/navigator")
+def navigator_layer(eid: str, user: dict = Depends(auth.current_user)):
+    """Export the engagement as a MITRE ATT&CK Navigator layer (JSON)."""
+    from . import navigator
+    e = db.get_engagement(eid, user["org_id"])
+    if not e:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    findings = db.list_findings(user["org_id"], engagement_id=eid)
+    layer = navigator.build_layer(e, _PLAYS_BY_ID, findings)
+    import json as _json
+    name = (e.get("name") or "engagement").replace('"', "").replace("\n", "")
+    return Response(
+        content=_json.dumps(layer, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}.navigator.json"'},
+    )
+
+
 _OPEN_STATUSES = {"open", "in_remediation", "retest"}
 _RESOLVED_STATUSES = {"fixed", "risk_accepted", "false_positive"}
 
